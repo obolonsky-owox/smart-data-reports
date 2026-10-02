@@ -4,7 +4,7 @@ describe('plugin.json', () => {
   it('serves from GitHub Pages, never from a tunnel', () => {
     expect(manifest.delivery).toEqual({
       type: 'remote',
-      url: 'https://owox.github.io/smart-data-reports/',
+      url: 'https://obolonsky-owox.github.io/smart-data-reports/',
     });
   });
 

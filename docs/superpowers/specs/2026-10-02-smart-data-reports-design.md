@@ -421,8 +421,8 @@ Any "no" changes the matching section of this spec before implementation continu
 
 ## 12. Repository and release
 
-- Repo `OWOX/smart-data-reports`, display name "Smart Data Reports", Pages URL
-  `https://owox.github.io/smart-data-reports/`, Vite `base: '/smart-data-reports/'`.
+- Repo `obolonsky-owox/smart-data-reports`, display name "Smart Data Reports", Pages URL
+  `https://obolonsky-owox.github.io/smart-data-reports/`, Vite `base: '/smart-data-reports/'`.
 - Conventions from `import-model`, minus its known gaps: `@owox/plugin-sdk` at 0.36.x; `tsconfig`
   does not alias the SDK to the mock (only Vite serve and vitest do); ESLint with a `lint` script
   and a lint step in CI; no stale config entries.

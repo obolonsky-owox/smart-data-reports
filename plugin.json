@@ -1,7 +1,7 @@
 {
   "name": "Smart Data Reports",
   "description": "Build ad-hoc reports on your data marts and their joinable data marts, see the result in seconds, and send it to Google Sheets.",
-  "delivery": { "type": "remote", "url": "https://owox.github.io/smart-data-reports/" },
+  "delivery": { "type": "remote", "url": "https://obolonsky-owox.github.io/smart-data-reports/" },
   "collections": [
     {
       "name": "reports",
