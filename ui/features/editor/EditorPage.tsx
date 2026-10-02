@@ -66,6 +66,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const [panelOpen, setPanelOpen] = useState(false);
   const [guarded, setGuarded] = useState<GuardedAction | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmBack, setConfirmBack] = useState(false);
   const [narrow, setNarrow] = useState(isNarrowScreen);
 
   useEffect(() => {
@@ -216,7 +217,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const header = (
     <header className='dm-page-header flex flex-wrap items-center justify-between gap-2'>
       <div className='flex min-w-0 items-center gap-2'>
-        <Button variant='ghost' size='icon' onClick={onBack} aria-label='Back to reports'>
+        <Button variant='ghost' size='icon' onClick={() => (doc.dirty ? setConfirmBack(true) : onBack())} aria-label='Back to reports'>
           <ArrowLeft className='h-4 w-4' />
         </Button>
         {draft ? (
@@ -243,6 +244,21 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
           )}
         </div>
       )}
+      <AlertDialog open={confirmBack} onOpenChange={setConfirmBack}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>Your changes to this report haven't been saved and will be lost.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {/* Radix focuses Cancel when the dialog opens, so Enter keeps the changes. */}
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className='bg-destructive hover:bg-destructive/90' onClick={onBack}>
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 

@@ -273,3 +273,29 @@ describe('saving a report linked to Google Sheets', () => {
     expect((savedDoc().document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id');
   });
 });
+
+describe('going back', () => {
+  it('goes straight back when nothing changed', async () => {
+    const onBack = vi.fn();
+    renderWithServices(<EditorPage onBack={onBack} />, await mockServices());
+    await userEvent.click(await screen.findByRole('button', { name: 'Back to reports' }));
+    expect(onBack).toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('asks before discarding unsaved changes', async () => {
+    const onBack = vi.fn();
+    renderWithServices(<EditorPage onBack={onBack} />, await mockServices());
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Email (Visitor)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Back to reports' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Discard unsaved changes?' });
+    expect(within(confirm).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(onBack).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to reports' }));
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Discard' }));
+    expect(onBack).toHaveBeenCalled();
+  });
+});
