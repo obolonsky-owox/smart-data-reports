@@ -34,12 +34,25 @@ import { useReportDocument, type SaveOutcome } from './use-report-document';
 import { useSchema } from './use-schema';
 
 interface PendingRemap { title: string; result: RemapResult; labels: string[] }
+/** What a non-author was about to do when the overwrite confirmation opened. */
+type GuardedAction = 'save' | 'create' | 'update';
+
+const NARROW_QUERY = '(max-width: 899px)';
+const isNarrowScreen = () => window.matchMedia?.(NARROW_QUERY).matches ?? false;
 
 const UNDERLINE_LIST = 'h-auto w-full justify-start gap-6 rounded-none border-b border-border bg-transparent p-0';
 const UNDERLINE_TRIGGER =
   'flex-none rounded-none border-0 border-b-2 border-transparent px-1 pb-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none';
 
-export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): void }) {
+interface EditorPageProps { reportId?: string; onBack(): void }
+
+export function EditorPage(props: EditorPageProps) {
+  // Retrying a failed load remounts the editor, which re-runs both the report and the data mart loads.
+  const [attempt, setAttempt] = useState(0);
+  return <Editor key={attempt} {...props} onReload={() => setAttempt((n) => n + 1)} />;
+}
+
+function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): void }) {
   const { api, theme } = useServices();
   const doc = useReportDocument(reportId);
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
@@ -51,8 +64,20 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
   const [sheets, setSheets] = useState<'create' | 'update' | null>(null);
   const [tab, setTab] = useState('table');
   const [panelOpen, setPanelOpen] = useState(false);
-  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const [guarded, setGuarded] = useState<GuardedAction | null>(null);
   const [saving, setSaving] = useState(false);
+  const [narrow, setNarrow] = useState(isNarrowScreen);
+
+  useEffect(() => {
+    const query = window.matchMedia?.(NARROW_QUERY);
+    if (!query) return;
+    const onChange = (event: MediaQueryListEvent) => {
+      setNarrow(event.matches);
+      if (!event.matches) setPanelOpen(false);
+    };
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -133,17 +158,39 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
     else toast.success(outcome.kind === 'synced' ? 'Saved and updated Google Sheets.' : 'Report saved.');
   }
 
-  async function save(asCopy = false) {
-    setConfirmOverwrite(false);
+  async function save(asCopy = false): Promise<boolean> {
     setSaving(true);
     try {
       report(await doc.saveWithSync({ asCopy }));
+      return true;
     } catch (error) {
       toast.error(describeError(error).message);
+      return false;
     } finally {
       setSaving(false);
     }
   }
+
+  // Saving and both Google Sheets flows write the document, so another member's report asks first.
+  function perform(action: GuardedAction, asCopy: boolean) {
+    if (action === 'save') {
+      void save(asCopy);
+      return;
+    }
+    if (!asCopy) {
+      setSheets(action);
+      return;
+    }
+    // The copy is the user's own and is not linked to any Google Sheets report yet.
+    void save(true).then((ok) => ok && setSheets('create'));
+  }
+
+  function guard(action: GuardedAction) {
+    if (doc.isAuthor) perform(action, false);
+    else setGuarded(action);
+  }
+
+  const openSheets = () => guard(linked ? 'update' : 'create');
 
   const header = (
     <header className='dm-page-header flex flex-wrap items-center justify-between gap-2'>
@@ -159,18 +206,20 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
       </div>
       {draft && index && (
         <div className='flex items-center gap-2'>
-          <Button variant='outline' disabled={!draft.columns.length || issues.length > 0} onClick={() => setSheets(linked ? 'update' : 'create')}>
+          <Button variant='outline' disabled={!draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
             <Sheet className='h-4 w-4' />
             {linked ? 'Update Google Sheets' : 'Create Google Sheets report'}
           </Button>
           {doc.dirty && <span role='status' aria-label='Unsaved changes' className='size-2 rounded-full bg-primary' />}
-          <Button disabled={!doc.dirty || saving} onClick={() => (doc.isAuthor ? void save() : setConfirmOverwrite(true))}>
+          <Button disabled={!doc.dirty || saving} onClick={() => guard('save')}>
             {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className='h-4 w-4' />}
             {linked ? 'Save and update Google Sheets' : 'Save'}
           </Button>
-          <Button variant='outline' size='icon' className='min-[900px]:hidden' aria-label='Columns' onClick={() => setPanelOpen(true)}>
-            <Columns3 className='h-4 w-4' />
-          </Button>
+          {narrow && (
+            <Button variant='outline' size='icon' aria-label='Columns' onClick={() => setPanelOpen(true)}>
+              <Columns3 className='h-4 w-4' />
+            </Button>
+          )}
         </div>
       )}
     </header>
@@ -196,6 +245,22 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>{fatal.message}</AlertTitle>
+            {(fatal.detail || fatal.retryable) && (
+              <AlertDescription>
+                {fatal.detail && (
+                  <details>
+                    <summary>Details</summary>
+                    <pre className='whitespace-pre-wrap text-xs'>{fatal.detail}</pre>
+                  </details>
+                )}
+                {fatal.retryable && (
+                  <Button variant='outline' size='sm' className='mt-2' onClick={onReload}>
+                    <RefreshCw className='h-4 w-4' />
+                    Retry
+                  </Button>
+                )}
+              </AlertDescription>
+            )}
           </Alert>
         </div>
       </div>
@@ -222,6 +287,34 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
               Start
             </Button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!mainMart) {
+    return (
+      <div className='dm-page' data-testid='editorPage'>
+        {header}
+        <div className='dm-page-content'>
+          <Alert variant='destructive'>
+            <AlertTitle>This report's data mart is no longer available for reports.</AlertTitle>
+            <AlertDescription>
+              <p>It may have been unpublished or hidden from reports. Pick another data mart to start this report again — its columns can't be carried over.</p>
+              <div className='mt-2 flex w-full max-w-sm items-center gap-2'>
+                <NativeSelect aria-label='Data mart' value={startId} onChange={(e) => setStartId(e.target.value)}>
+                  {marts!.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <Button variant='outline' disabled={!startId} onClick={() => doc.setDraft(emptyDraft(startId))}>
+                  Use this data mart
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
         </div>
       </div>
     );
@@ -264,7 +357,7 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
   const requestFilter = (field: string) => {
     setFilterRequest({ field, nonce: Date.now() });
     // On wide screens the panel is already visible; the side sheet is only for narrow ones.
-    if (window.matchMedia('(max-width: 899px)').matches) setPanelOpen(true);
+    if (narrow) setPanelOpen(true);
   };
 
   const panel = (
@@ -320,7 +413,7 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
                   onSetDateTrunc={(column, unit) => edit((d) => setDateTrunc(d, column, unit))}
                   onEditFilter={requestFilter}
                   onRemoveFilter={(id) => edit((d) => removeFilter(d, id))}
-                  onCreateSheets={() => setSheets(linked ? 'update' : 'create')}
+                  onCreateSheets={openSheets}
                   onCancel={query.cancel}
                   onRetry={apply}
                 />
@@ -341,24 +434,26 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
                   linked={linked}
                   draftChanged={!!linked && linked.syncedDraftHash !== hash}
                   reportTitle={doc.title}
-                  onCreateSheets={() => setSheets('create')}
-                  onUpdateSheets={() => setSheets('update')}
+                  onCreateSheets={() => guard('create')}
+                  onUpdateSheets={() => guard('update')}
                 />
               </TabsContent>
             </Tabs>
           )}
         </main>
-        <aside className='hidden w-[380px] shrink-0 border-l border-border min-[900px]:flex'>{panel}</aside>
+        {!narrow && <aside className='flex w-[380px] shrink-0 border-l border-border'>{panel}</aside>}
       </div>
 
-      <SidePanel open={panelOpen} onOpenChange={setPanelOpen}>
-        <SheetContent className='w-full p-0 sm:min-w-[400px] min-[900px]:hidden'>
-          <SheetHeader className='border-b border-border p-4'>
-            <SheetTitle>Columns</SheetTitle>
-          </SheetHeader>
-          {panel}
-        </SheetContent>
-      </SidePanel>
+      {narrow && (
+        <SidePanel open={panelOpen} onOpenChange={setPanelOpen}>
+          <SheetContent className='w-full p-0 sm:min-w-[400px]'>
+            <SheetHeader className='border-b border-border p-4'>
+              <SheetTitle>Columns</SheetTitle>
+            </SheetHeader>
+            {panel}
+          </SheetContent>
+        </SidePanel>
+      )}
 
       {dateChoice && (
         <DateChoiceDialog
@@ -392,15 +487,29 @@ export function EditorPage({ reportId, onBack }: { reportId?: string; onBack(): 
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={confirmOverwrite} onOpenChange={setConfirmOverwrite}>
+      <AlertDialog open={!!guarded} onOpenChange={(open) => !open && setGuarded(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>This report belongs to another member</AlertDialogTitle>
-            <AlertDialogDescription>Save your changes as your own copy, or overwrite their report for everyone.</AlertDialogDescription>
+            <AlertDialogDescription>
+              {guarded === 'save'
+                ? 'Save your changes as your own copy, or overwrite their report for everyone.'
+                : 'Creating or updating a Google Sheets report saves this report. Continue with your own copy, or overwrite their report for everyone.'}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => void save(false)}>Overwrite</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void save(true)}>Save as copy</AlertDialogAction>
+            {/* Radix focuses Cancel when the dialog opens, so Enter never overwrites. */}
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant='destructive'
+              onClick={() => {
+                if (guarded) perform(guarded, false);
+                setGuarded(null);
+              }}
+            >
+              Overwrite
+            </Button>
+            <AlertDialogAction onClick={() => guarded && perform(guarded, true)}>Save as copy</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
