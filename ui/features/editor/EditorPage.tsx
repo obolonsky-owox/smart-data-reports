@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowLeft, Columns3, Loader2, RefreshCw, Save, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
@@ -98,7 +98,14 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const mainMart = useMemo(() => marts?.find((m) => m.id === draft?.mainDataMartId), [marts, draft?.mainDataMartId]);
   const schema = useSchema(api, mainMart);
   const query = useQueryRun(api);
-  const index: SchemaIndex | null = schema.state.status === 'ready' ? schema.state.index : null;
+  // Right after the main data mart changes, the loaded schema can still be the old one's.
+  const index: SchemaIndex | null =
+    schema.state.status === 'ready' && schema.state.index.mainDataMartId === draft?.mainDataMartId ? schema.state.index : null;
+
+  // A result (or a running query) belongs to the main data mart it was applied on.
+  const mainDataMartId = draft?.mainDataMartId;
+  const resetQuery = query.reset;
+  useLayoutEffect(() => resetQuery(), [mainDataMartId, resetQuery]);
 
   const edit = useCallback(
     (fn: (d: ReportDraft, i: SchemaIndex) => ReportDraft) => {

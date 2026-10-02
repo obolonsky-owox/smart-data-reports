@@ -54,3 +54,16 @@ it('cancels a running query', async () => {
   act(() => result.current.cancel());
   expect(result.current.state).toEqual({ status: 'idle', cancelled: true });
 });
+
+it('resets to idle and aborts the running query', async () => {
+  let signal: AbortSignal | undefined;
+  const api = {
+    runQuery: vi.fn((_id: string, _options: unknown, s: AbortSignal) => ((signal = s), new Promise(() => {}))),
+    getRunTotals: vi.fn(),
+  } as unknown as OdmApi;
+  const { result } = renderHook(() => useQueryRun(api));
+  act(() => void result.current.run(DM.visitor, draft('email')));
+  act(() => result.current.reset());
+  expect(result.current.state).toEqual({ status: 'idle' });
+  expect(signal?.aborted).toBe(true);
+});

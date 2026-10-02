@@ -54,7 +54,14 @@ export function useQueryRun(api: OdmApi, { totalsRetryMs = 3000 }: { totalsRetry
     setState({ status: 'idle', cancelled: true });
   }, []);
 
+  /** Drops the result and aborts any running query, e.g. when the main data mart changes. */
+  const reset = useCallback(() => {
+    current.current?.abort();
+    current.current = null;
+    setState((s) => (s.status === 'idle' && !s.cancelled ? s : { status: 'idle' }));
+  }, []);
+
   useEffect(() => () => current.current?.abort(), []);
 
-  return { state, run, cancel };
+  return { state, run, cancel, reset };
 }

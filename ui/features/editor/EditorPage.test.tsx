@@ -81,6 +81,26 @@ it('links a new Google Sheets report before its first run, so a failed run offer
   expect(saved.linkedReport).toMatchObject({ reportId: 'report-2', dataMartId: DM.visitor });
 });
 
+it('cancels the running query and clears the result when the main data mart changes', async () => {
+  const services = await mockServices();
+  let signal: AbortSignal | undefined;
+  services.api = {
+    ...services.api,
+    runQuery: vi.fn((_id: string, _options: unknown, s?: AbortSignal) => ((signal = s), new Promise<never>(() => {}))),
+  };
+  renderWithServices(<EditorPage onBack={vi.fn()} />, services);
+  await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+  await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+  await userEvent.click(await screen.findByRole('checkbox', { name: 'Email (Visitor)' }));
+  await userEvent.click(screen.getByTestId('apply'));
+  expect(await screen.findByText('Running query…')).toBeInTheDocument();
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Report on' }), DM.session);
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove and continue' }));
+  expect(await screen.findByText('Pick columns and click Apply')).toBeInTheDocument();
+  expect(screen.queryByText('Running query…')).not.toBeInTheDocument();
+  expect(signal?.aborted).toBe(true);
+});
+
 it('blocks Apply and explains when a saved column no longer exists', async () => {
   __mock.seedReport('r1', {
     schemaVersion: 1, title: 'Old', createdBy: 'demo-user', updatedBy: 'demo-user',

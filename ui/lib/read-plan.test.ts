@@ -85,6 +85,14 @@ describe('validateDraft', () => {
     );
   });
 
+  it('flags a sort on a column that is not in the report', () => {
+    const draft = { ...add(emptyDraft(DM.visitor), 'email'), sorts: [{ column: 'client_id', direction: 'asc' as const }] };
+    expect(validateDraft(draft, index, today)).toContainEqual({ kind: 'sort-not-selected', column: 'client_id' });
+    expect(describeIssue({ kind: 'sort-not-selected', column: 'client_id' }, index)).toBe(
+      'The report is sorted by "Client ID", which isn\'t one of its columns. Remove that sort or add the column.',
+    );
+  });
+
   it('flags a filter parameter longer than ODM accepts', () => {
     const draft = upsertFilter(add(emptyDraft(DM.visitor), 'email'), {
       id: 'long', column: 'email', aliasPath: '', operator: 'in',

@@ -38,6 +38,7 @@ export interface ReportConfig {
 export type DraftIssue =
   | { kind: 'no-columns' }
   | { kind: 'unknown-column'; column: string }
+  | { kind: 'sort-not-selected'; column: string }
   | { kind: 'filter-needs-value'; filterId: string }
   | { kind: 'too-many-values'; filterId: string }
   | { kind: 'too-long'; param: 'filter' | 'sort' | 'aggregation' | 'dateTrunc' };
@@ -118,6 +119,10 @@ export function validateDraft(draft: ReportDraft, index: SchemaIndex, today = ne
   for (const column of referenced) {
     if (!index.fields.has(column)) issues.push({ kind: 'unknown-column', column });
   }
+  const selected = new Set(draft.columns.map((c) => c.name));
+  for (const sort of draft.sorts) {
+    if (!selected.has(sort.column)) issues.push({ kind: 'sort-not-selected', column: sort.column });
+  }
   for (const filter of draft.filters) {
     if (VALUELESS.has(filter.operator)) continue;
     if (!hasValue(filter)) issues.push({ kind: 'filter-needs-value', filterId: filter.id });
@@ -139,6 +144,10 @@ export function describeIssue(issue: DraftIssue, index: SchemaIndex): string {
     case 'unknown-column': {
       const label = index.fields.get(issue.column)?.label ?? issue.column;
       return `"${label}" is no longer available. Remove it to run the report.`;
+    }
+    case 'sort-not-selected': {
+      const label = index.fields.get(issue.column)?.label ?? issue.column;
+      return `The report is sorted by "${label}", which isn't one of its columns. Remove that sort or add the column.`;
     }
     case 'filter-needs-value':
       return 'Fill in a value for every filter.';
