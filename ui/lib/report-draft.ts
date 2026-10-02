@@ -238,7 +238,12 @@ function remap(
       dropped.push(filter.column);
       continue;
     }
-    filters.push({ ...filter, column: mapped.name, aliasPath: mapped.aliasPath });
+    filters.push({
+      ...filter,
+      column: mapped.name,
+      aliasPath: mapped.aliasPath,
+      sliceOnly: mapped.aliasPath === '' ? false : filter.sliceOnly,
+    });
   }
 
   const sorts = draft.sorts.flatMap((s) => {

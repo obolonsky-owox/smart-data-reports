@@ -140,6 +140,17 @@ describe('rebaseOnMain', () => {
   });
 });
 
+describe('rebaseOnMain filters', () => {
+  it('clears the slice flag on a filter that moves to the main data mart', () => {
+    let draft = add(emptyDraft(DM.visitor), 'sessions__source');
+    draft = upsertFilter(draft, { id: 'f1', column: 'sessions__source', aliasPath: 'sessions', operator: 'eq', value: 'google', sliceOnly: true });
+    const { draft: next } = rebaseOnMain(draft, visitor, session);
+    expect(next.filters).toEqual([
+      { id: 'f1', column: 'source', aliasPath: '', operator: 'eq', value: 'google', sliceOnly: false },
+    ]);
+  });
+});
+
 describe('usedInstances', () => {
   it('collects included paths and paths referenced by columns', () => {
     const draft = add(emptyDraft(DM.visitor), 'email', 'contact_user__creation_source');
