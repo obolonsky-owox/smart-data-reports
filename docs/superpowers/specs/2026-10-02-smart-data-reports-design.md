@@ -110,13 +110,13 @@ interface ReportDraft {
   dateRanges: DraftDateRange[];
   filters: DraftFilter[];
   sorts: { column: string; direction: 'asc' | 'desc' }[];   // priority order
+  dateRangeOptOut: AliasPath[];     // instances whose auto-added date the user declined or removed
 }
 
 interface DraftColumn {
   name: string;                     // native name, or ODM unified blended name
   aliasPath: AliasPath;
   aggregations?: AggregateFunction[];   // absent = let ODM decide
-  aggregationOptOut?: boolean;          // user removed ODM's automatic aggregation
   dateTrunc?: 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 }
 
@@ -128,6 +128,7 @@ interface DraftDateRange {
 }
 
 interface DraftFilter {
+  id: string;                       // stable id for editing in the UI
   column: string;
   aliasPath: AliasPath;
   operator: FilterOperator;
@@ -240,7 +241,8 @@ This / Last quarter, This / Last year, Custom, All time.
   bucket ▸* (Full date / Day / Week / Month / Quarter / Year) on date fields. No *Rename* in v1:
   ODM read plans carry no column alias, so a plugin-only name would not reach Google Sheets.
 - Aggregations ODM applied automatically are shown as chosen ("Automatic" hint) and can be
-  changed or removed; removing them sets `aggregationOptOut`.
+  changed to another function. HTTP Data has no opt-out parameter (unlike reports'
+  `autoAggregationOptOut`), so *None* is not offered on a column ODM aggregates automatically.
 - Totals row under the header from the run's `totals`; the cell shows the column's own function,
   a tooltip shows the rest.
 - Pagination: 100 rows per page, "1–100 of 2,500", previous / next.
@@ -362,10 +364,12 @@ Follow the OWOX Data Marts design system
 (`OWOX/owox-factory/.agents/skills/owox-data-marts-design`): enterprise, dense, semantic tokens,
 light/dark through `.dark` on `<html>`.
 
-- **Tokens.** `@owox/ui` cannot be imported by a plugin, so `ui/styles/tokens.css` is a vendored
-  copy of the token, semantic-colour and `dm-*` sections of
-  `owox-data-marts/packages/ui/src/styles/globals.css`, with a header naming the source commit.
-  `npm run sync:tokens -- <ref>` refreshes it from a given ref; no hand edits.
+- **Vendored UI.** `@owox/ui` cannot be imported by a plugin as a package, so
+  `ui/vendor/owox-ui/` holds a verbatim copy of `packages/ui/src/styles/globals.css` (only its
+  `@source` lines are rewritten), `lib/utils.ts`, `lib/dismissable-portals.ts` and the primitives
+  the plugin uses. A TypeScript/Vite alias maps `@owox/ui/*` to that folder, so the files keep
+  their original imports. `VENDORED_FROM` records the source commit. `npm run sync:ui --
+  <owox-data-marts checkout>` refreshes the copy; no hand edits in `ui/vendor/`.
 - **Stack matched to the product:** React 19, Vite 6, TypeScript 5.9, Tailwind CSS v4 (CSS-first),
   shadcn/ui primitives generated into `ui/components/ui/` over Radix, `lucide-react`, TanStack
   Table v8, `@xyflow/react` + `@dagrejs/dagre`, `@dnd-kit` for column reordering, Sonner toasts.
@@ -383,16 +387,17 @@ light/dark through `.dark` on `<html>`.
 
 Through the tunnel + debug-manifest loop from the workspace `CLAUDE.md`, on cloud:
 
-1. HTTP Data applies ODM's automatic aggregation for an explicit column list with a metric, and
-   how a removed automatic aggregation is expressed there. Reports have
-   `autoAggregationOptOut`; if HTTP Data has no equivalent, `aggregationOptOut` is dropped from
-   the draft and *None* is not offered on columns ODM aggregates automatically.
+1. HTTP Data applies ODM's automatic aggregation for an explicit column list with a metric.
+   (Resolved from code: HTTP Data has no opt-out parameter; see §6.4.)
 2. `totals` are present on the HTTP Data run.
 3. `x-owox-run-id` reaches the plugin.
-4. The exact verb and path for updating a report's configuration.
+4. `PUT /api/reports/:id` (verified in code) accepts the full configuration and keeps the
+   spreadsheet.
 5. `document.execCommand('copy')` works in the plugin iframe.
 6. `GET /api/data-destinations/by-type/GOOGLE_SHEETS` returns only destinations the member can
    use.
+7. `between` with `YYYY-MM-DD` bounds on a `TIMESTAMP` column includes the whole `to` day. If
+   not, custom ranges and *Last year* send `to` as the next day with `lt` semantics instead.
 
 Any "no" changes the matching section of this spec before implementation continues.
 
@@ -428,3 +433,4 @@ Any "no" changes the matching section of this spec before implementation continu
 - Writing into an existing spreadsheet chosen by URL.
 - Creating a Google Sheets destination from the plugin.
 - Charts.
+- Unique Count metrics (HTTP Data has no `uniqueCount` parameter).
