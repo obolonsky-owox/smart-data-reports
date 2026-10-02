@@ -1,0 +1,22 @@
+const NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
+
+export function formatCell(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return String(value);
+  if (typeof value === 'number') return NUMBER.format(value);
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
+}
+
+export function formatCount(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
+export function formatRelativeTime(iso: string, now = new Date()): string {
+  const seconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} h ago`;
+  if (seconds < 7 * 86_400) return `${Math.floor(seconds / 86_400)} d ago`;
+  return iso.slice(0, 10);
+}

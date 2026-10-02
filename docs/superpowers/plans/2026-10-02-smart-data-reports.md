@@ -14,7 +14,7 @@
 
 - Node `>=22.22`; `@owox/plugin-sdk` pinned exactly at `0.36.0`.
 - Vite `root: 'ui'`, `base: '/smart-data-reports/'` on build, `build.outDir: '../dist'`.
-- Delivery URL `https://owox.github.io/smart-data-reports/`; never point the production `plugin.json` at a tunnel.
+- Delivery URL `https://obolonsky-owox.github.io/smart-data-reports/`; never point the production `plugin.json` at a tunnel.
 - No `localStorage`, `sessionStorage`, cookies, IndexedDB or service workers. No credentials, API keys or `.env*` files.
 - `ui/lib/*` never imports React. `ui/vendor/*` is never edited by hand — only by `npm run sync:ui`.
 - Row cap `2500`; HTTP Data `limit: 2501`; page size `100`; default date range *Last 30 days* sent as `last_n_days` with `n: 29` (30 days including today).
@@ -240,7 +240,7 @@ export default tseslint.config(
 {
   "name": "Smart Data Reports",
   "description": "Build ad-hoc reports on your data marts and their joinable data marts, see the result in seconds, and send it to Google Sheets.",
-  "delivery": { "type": "remote", "url": "https://owox.github.io/smart-data-reports/" },
+  "delivery": { "type": "remote", "url": "https://obolonsky-owox.github.io/smart-data-reports/" },
   "collections": [
     {
       "name": "reports",
@@ -263,7 +263,7 @@ describe('plugin.json', () => {
   it('serves from GitHub Pages, never from a tunnel', () => {
     expect(manifest.delivery).toEqual({
       type: 'remote',
-      url: 'https://owox.github.io/smart-data-reports/',
+      url: 'https://obolonsky-owox.github.io/smart-data-reports/',
     });
   });
 
@@ -8024,7 +8024,7 @@ git commit -m "Assemble the report editor"
 
 **Interfaces:**
 - Consumes: the finished plugin.
-- Produces: a public `OWOX/smart-data-reports` repository with Pages and a `v0.1.0` release, installed for the user with `--scope member`.
+- Produces: a public `obolonsky-owox/smart-data-reports` repository with Pages and a `v0.1.0` release, installed for the user with `--scope member`.
 
 - [ ] **Step 1: Document the layout in `AGENTS.md`**
 
@@ -8053,7 +8053,7 @@ Append to `AGENTS.md`:
 In `../CLAUDE.md`, add a row under the `import-model/` row:
 
 ```markdown
-| `smart-data-reports/` | `OWOX/smart-data-reports` | Builds ad-hoc reports on data marts and their joinable data marts. |
+| `smart-data-reports/` | `obolonsky-owox/smart-data-reports` | Builds ad-hoc reports on data marts and their joinable data marts. |
 ```
 
 ```bash
@@ -8071,12 +8071,12 @@ Expected: all pass, no uncommitted files, `CLEAN`.
 - [ ] **Step 4: Publish (ask the user first; each command is outward-facing)**
 
 ```bash
-gh repo create OWOX/smart-data-reports --public --source . --push
-gh api --method POST repos/OWOX/smart-data-reports/pages -f build_type=workflow
-gh run watch --repo OWOX/smart-data-reports
-curl -sSf -o /dev/null -w '%{http_code}\n' https://owox.github.io/smart-data-reports/
-gh release create v0.1.0 --repo OWOX/smart-data-reports --target main --generate-notes
-owox-ctl plugins publish OWOX/smart-data-reports --scope member
+gh repo create obolonsky-owox/smart-data-reports --public --source . --push
+gh api --method POST repos/obolonsky-owox/smart-data-reports/pages -f build_type=workflow
+gh run watch --repo obolonsky-owox/smart-data-reports
+curl -sSf -o /dev/null -w '%{http_code}\n' https://obolonsky-owox.github.io/smart-data-reports/
+gh release create v0.1.0 --repo obolonsky-owox/smart-data-reports --target main --generate-notes
+owox-ctl plugins publish obolonsky-owox/smart-data-reports --scope member
 ```
 
 Expected: the Pages URL answers `200` without sign-in; `owox-ctl` prints the publication with no `rejections`.

@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node", "vite/client"],
+    "baseUrl": ".",
+    "paths": { "@owox/ui/*": ["./ui/vendor/owox-ui/*"] }
+  },
+  "include": ["ui", "vite.config.ts", "vitest.config.ts"]
+}
