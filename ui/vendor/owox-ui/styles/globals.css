@@ -1,0 +1,514 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@source '../../../**/*.{ts,tsx}';
+
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.3346 0.0123 279.25);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.3346 0.0123 279.25);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.3346 0.0123 279.25);
+  --primary: oklch(0.6179 0.2295 250.87);
+  --primary-hover: oklch(0.54 0.23 250.87);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.5148 0.0128 274.72);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --destructive-bg: oklch(0.971 0.013 17.38);
+  --success: oklch(0.627 0.194 149.21);
+  --success-accent: oklch(0.7157 0.1515 140.73);
+  --success-bg: oklch(0.965 0.025 140.73);
+  --warning: oklch(0.666 0.179 58.32);
+  --warning-bg: oklch(0.987 0.022 95.28);
+  --notice: var(--muted-foreground);
+  --notice-bg: var(--muted);
+  --border: oklch(0.922 0 0);
+  /* A separator drawn ON a `muted` surface (e.g. table cells painted `bg-muted` so their sticky
+     columns stay opaque) — not to be confused with `border-muted`, which paints a border IN the
+     muted colour. In the light theme the ordinary border already stands out against that surface. */
+  --border-on-muted: var(--border);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-active: oklch(1 0 0);
+  --sidebar-active-foreground: oklch(0.145 0 0);
+  --table-thead-sticky-bg: oklch(0.98 0 0);
+  --table-tbody-sticky-hover-bg: oklch(0.97 0 0);
+  --table-tbody-sticky-bg: oklch(1 0 0);
+
+  /* Brand Blue Color Scale based on brand-blue-500: oklch(0.6179 0.2295 250.87) */
+  --brand-blue-50: oklch(0.985 0.03 250.87);
+  --brand-blue-50-foreground: oklch(0.2 0 0);
+  --brand-blue-100: oklch(0.955 0.05 250.87);
+  --brand-blue-100-foreground: oklch(0.2 0 0);
+  --brand-blue-200: oklch(0.9 0.08 250.87);
+  --brand-blue-200-foreground: oklch(0.2 0 0);
+  --brand-blue-300: oklch(0.8 0.14 250.87);
+  --brand-blue-300-foreground: oklch(0.985 0 0);
+  --brand-blue-400: oklch(0.7 0.19 250.87);
+  --brand-blue-400-foreground: oklch(0.985 0 0);
+  --brand-blue-500: oklch(0.6179 0.2295 250.87);
+  --brand-blue-500-foreground: oklch(0.985 0 0);
+  --brand-blue-600: oklch(0.54 0.23 250.87);
+  --brand-blue-600-foreground: oklch(0.985 0 0);
+  --brand-blue-700: oklch(0.44 0.2 250.87);
+  --brand-blue-700-foreground: oklch(0.985 0 0);
+  --brand-blue-800: oklch(0.36 0.17 250.87);
+  --brand-blue-800-foreground: oklch(0.985 0 0);
+  --brand-blue-900: oklch(0.28 0.14 250.87);
+  --brand-blue-900-foreground: oklch(0.985 0 0);
+}
+
+.dark {
+  --background: oklch(0.205 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.6179 0.2295 250.87);
+  --primary-hover: oklch(0.54 0.23 250.87);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --destructive-bg: oklch(0.258 0.092 26.042);
+  --success: oklch(0.792 0.209 151.71);
+  --success-accent: oklch(0.792 0.209 151.71);
+  --success-bg: oklch(0.266 0.065 152.93);
+  --warning: oklch(0.828 0.189 84.43);
+  --warning-bg: oklch(0.279 0.077 45.635);
+  --notice: var(--muted-foreground);
+  --notice-bg: var(--muted);
+  --border: oklch(0.269 0 0);
+  /* `--border` is the very shade of `--muted` here, so a border on a muted surface would vanish;
+     a touch of white keeps such separators visible. Stronger than the `dark:border-white/4` many
+     cards and tables use because those sit on a translucent `dark:bg-white/1`..`/4` wash over the
+     page background, a darker surface than `--muted`; this token is the named form for the
+     opaque `bg-muted` case, and the literal to reach for there in future. */
+  --border-on-muted: oklch(1 0 0 / 8%);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.145 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+  --sidebar-active: oklch(0.269 0 0);
+  --sidebar-active-foreground: oklch(0.985 0 0);
+  --table-thead-sticky-bg: oklch(0.242 0 0);
+  --table-tbody-sticky-hover-bg: oklch(0.269 0 0);
+  --table-tbody-sticky-bg: oklch(0.252 0 0);
+
+  /* Brand Blue Color Scale — Dark Theme */
+  --brand-blue-50: oklch(0.36 0.17 250.87);
+  --brand-blue-50-foreground: oklch(0.985 0 0);
+  --brand-blue-100: oklch(0.4 0.17 250.87);
+  --brand-blue-100-foreground: oklch(0.985 0 0);
+  --brand-blue-200: oklch(0.44 0.2 250.87);
+  --brand-blue-200-foreground: oklch(0.985 0 0);
+  --brand-blue-300: oklch(0.5 0.22 250.87);
+  --brand-blue-300-foreground: oklch(0.985 0 0);
+  --brand-blue-400: oklch(0.56 0.23 250.87);
+  --brand-blue-400-foreground: oklch(0.985 0 0);
+  --brand-blue-500: oklch(0.6179 0.2295 250.87);
+  --brand-blue-500-foreground: oklch(0.985 0 0);
+  --brand-blue-600: oklch(0.54 0.23 250.87);
+  --brand-blue-600-foreground: oklch(0.985 0 0);
+  --brand-blue-700: oklch(0.44 0.2 250.87);
+  --brand-blue-700-foreground: oklch(0.985 0 0);
+  --brand-blue-800: oklch(0.36 0.17 250.87);
+  --brand-blue-800-foreground: oklch(0.985 0 0);
+  --brand-blue-900: oklch(0.28 0.14 250.87);
+  --brand-blue-900-foreground: oklch(0.985 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-bg: var(--destructive-bg);
+  --color-success: var(--success);
+  --color-success-accent: var(--success-accent);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-notice: var(--notice);
+  --color-notice-bg: var(--notice-bg);
+  --color-border: var(--border);
+  --color-border-on-muted: var(--border-on-muted);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
+  --color-table-thead-sticky-bg: var(--table-thead-sticky-bg);
+  --color-table-tbody-sticky-hover-bg: var(--table-tbody-sticky-hover-bg);
+  --color-table-tbody-sticky-bg: var(--table-tbody-sticky-bg);
+  --color-brand-blue-50: var(--brand-blue-50);
+  --color-brand-blue-100: var(--brand-blue-100);
+  --color-brand-blue-200: var(--brand-blue-200);
+  --color-brand-blue-300: var(--brand-blue-300);
+  --color-brand-blue-400: var(--brand-blue-400);
+  --color-brand-blue-500: var(--brand-blue-500);
+  --color-brand-blue-600: var(--brand-blue-600);
+  --color-brand-blue-700: var(--brand-blue-700);
+  --color-brand-blue-800: var(--brand-blue-800);
+  --color-brand-blue-900: var(--brand-blue-900);
+  --color-brand-blue-50-foreground: var(--brand-blue-50-foreground);
+  --color-brand-blue-100-foreground: var(--brand-blue-100-foreground);
+  --color-brand-blue-200-foreground: var(--brand-blue-200-foreground);
+  --color-brand-blue-300-foreground: var(--brand-blue-300-foreground);
+  --color-brand-blue-400-foreground: var(--brand-blue-400-foreground);
+  --color-brand-blue-500-foreground: var(--brand-blue-500-foreground);
+  --color-brand-blue-600-foreground: var(--brand-blue-600-foreground);
+  --color-brand-blue-700-foreground: var(--brand-blue-700-foreground);
+  --color-brand-blue-800-foreground: var(--brand-blue-800-foreground);
+  --color-brand-blue-900-foreground: var(--brand-blue-900-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  [data-sonner-toaster] {
+    @apply !z-30;
+  }
+}
+
+/* DM Animations */
+@keyframes fadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dm-animate-fade-up {
+  animation: fadeUp 0.3s ease-out forwards;
+}
+/* end: DM Animations */
+
+.dm-page {
+  @apply min-h-full;
+}
+
+/* DM Page: Header */
+.dm-page-header {
+  @apply px-8 py-4 md:px-12 md:py-6;
+}
+.dm-page-header-title {
+  @apply text-xl font-medium md:text-2xl;
+}
+
+/* DM Page: Content */
+.dm-page-content {
+  @apply px-4 md:px-12;
+}
+
+/* DM Card */
+.dm-card {
+  @apply bg-muted/50 rounded-md border-b border-gray-200 p-4 dark:border-white/4 dark:bg-white/4;
+}
+.dm-card-table-body-row-actionbtn {
+  @apply h-8 transition-colors transition-shadow duration-200 hover:bg-white hover:shadow-xs dark:hover:bg-white/4;
+}
+.dm-card-table-body-row-actionbtn-icon {
+  @apply text-muted-foreground h-4 w-4;
+}
+
+/* DM Empty State Block */
+.dm-empty-state {
+  @apply flex flex-col items-center justify-center px-4 py-24;
+}
+.dm-empty-state-ico {
+  @apply mb-6 h-16 w-16 text-neutral-400 dark:text-neutral-300;
+}
+.dm-empty-state-title {
+  @apply text-foreground mb-3 text-center text-xl font-medium;
+}
+.dm-empty-state-subtitle {
+  @apply text-muted-foreground mb-8 text-center;
+}
+
+/* DM Card Block */
+.dm-card-block {
+  @apply flex w-full flex-col gap-4 rounded-md border-b border-gray-200 bg-white p-4 transition-shadow duration-200 hover:shadow-xs dark:border-0 dark:bg-white/2;
+}
+.dm-card-formcontrol {
+  @apply dark:bg-black/16 dark:hover:bg-black/24;
+}
+
+/* 404 page tunnel background */
+.dm-empty-state-404page {
+  @apply relative flex h-full w-full items-center justify-center overflow-hidden px-4 py-12 sm:px-12;
+}
+.dm-empty-state-404page-foreground {
+  @apply relative z-10 flex w-full flex-col items-center justify-center;
+}
+.dm-empty-state-404page-background {
+  @apply pointer-events-none absolute -inset-[20%] z-0 bg-[length:40px_40px] lg:bg-[length:80px_80px];
+  --grid-color: rgba(0, 0, 0, 0.05);
+
+  background-image:
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+
+  animation:
+    zoomTunnel 32s ease-in-out infinite,
+    tunnelScroll 16s linear infinite;
+}
+
+.dark .dm-empty-state-404page-background {
+  --grid-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Zoom + subtle rotation */
+@keyframes zoomTunnel {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.5) rotate(45deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* Infinite background scroll */
+@keyframes tunnelScroll {
+  from {
+    background-position:
+      0 0,
+      0 0;
+  }
+  to {
+    background-position:
+      80px 80px,
+      80px 80px;
+  }
+}
+
+/* Animated Icon for Empty Data Marts page */
+/* --- Entrance (only once) --- */
+@keyframes icon-entrance {
+  0% {
+    transform: translateY(4px) scale(0.95);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(2px) scale(0.98);
+    opacity: 0.6;
+  }
+  40% {
+    transform: translateY(0) scale(1.05);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(0) scale(1.02);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --- Existing animations (unchanged visuals) --- */
+@keyframes ring-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.25;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0);
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.5;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@keyframes glow-burst {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* --- Classes --- */
+.animate-ring-pulse {
+  @apply absolute rounded-full border border-neutral-300/20 dark:border-neutral-600/20;
+  animation: ring-pulse 6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* entrance + continuous pulse */
+.animate-icon-entrance {
+  @apply relative h-32 w-32 text-neutral-400 lg:h-48 lg:w-48 xl:h-64 xl:w-64 2xl:h-72 2xl:w-72 dark:text-neutral-300;
+  animation: icon-entrance 1.6s ease-out forwards;
+}
+
+.animate-glow-burst {
+  @apply absolute top-1/2 left-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-tr from-neutral-300/50 to-transparent blur-2xl dark:from-neutral-600/30;
+  animation:
+    glow-burst 1.6s ease-out forwards,
+    glow-pulse 6s 1.6s ease-in-out infinite;
+}
+
+/* --- Insights Loader Steps Animations --- */
+
+@keyframes fade-slide-in-out {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  10%,
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide-in-out {
+  animation: fade-slide-in-out 5s ease-in-out forwards;
+  will-change: transform, opacity;
+}
+
+/* --- Soft Pulse Animation --- */
+@keyframes soft-glow {
+  0% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.1;
+  }
+}
+
+/* --- Party Animations --- */
+@keyframes party-cone {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  15% {
+    transform: rotate(-6deg) scale(0.92);
+  }
+  25% {
+    transform: rotate(4deg) scale(1.08);
+  }
+  35% {
+    transform: rotate(0deg) scale(1);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@keyframes confetti-loop {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6) rotate(0deg);
+  }
+  20% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.1) rotate(8deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2px) scale(1);
+  }
+}
+
+.animate-party-cone {
+  animation: party-cone 3s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 20% 80%;
+}
+
+.animate-confetti-loop {
+  animation: confetti-loop 3s ease-in-out infinite;
+}
