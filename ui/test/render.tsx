@@ -15,3 +15,7 @@ export function renderWithServices(ui: ReactElement, services: Services) {
     </ServicesProvider>,
   );
 }
+
+export function renderUi(ui: ReactElement) {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
