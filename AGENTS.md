@@ -25,3 +25,19 @@ Read first: `docs/superpowers/specs/2026-10-02-smart-data-reports-design.md`, th
 - Real host — expose `VITE_REAL_SDK=1 TUNNEL_HOST=<host> npm run dev` on a stable HTTPS tunnel,
   point a separate debug-manifest repo at it, publish `--scope member`, install, refresh the frame.
   `VITE_PROBE=1` additionally opens the Step 0 host probe instead of the app.
+
+## Layout
+
+| Path | Purpose |
+| --- | --- |
+| `plugin.json` | Manifest. The `reports` collection declaration is final. |
+| `ui/lib/schema-index.ts` | Blendable schema → data marts, instances (one per join path), fields. |
+| `ui/lib/report-draft.ts` | The report state and its rules: auto dates, path changes, rebasing. |
+| `ui/lib/read-plan.ts` | Draft → HTTP Data parameters and report configuration; validation. |
+| `ui/lib/odm-api.ts` | Typed calls through `ctx.owox`. |
+| `ui/lib/report-store.ts` | Saved reports in the `reports` collection. |
+| `ui/lib/sheets-sync.ts` | Create/update the linked ODM Google Sheets report. |
+| `ui/lib/canvas-model.ts` | Draft → canvas nodes, edges and layout. |
+| `ui/features/*` | React screens; props-driven, tested against `ui/sdk-mock.ts`. |
+| `ui/vendor/owox-ui/` | Vendored ODM UI; refresh with `npm run sync:ui`. |
+| `docs/verification/host-checks.md` | Platform facts verified on a real host. |
