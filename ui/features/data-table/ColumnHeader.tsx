@@ -7,31 +7,10 @@ import {
 import { cn } from '@owox/ui/lib/utils';
 import type { AggregateFunction, DateTruncUnit } from '../../lib/odm-types';
 import type { OutputColumn } from '../../lib/output-columns';
+import { aggregationsFor, FN_LABEL, TRUNC_OPTIONS } from '../../lib/aggregation-labels';
 import { describeFilter } from '../../lib/filter-operators';
 import type { ReportDraft } from '../../lib/report-draft';
-import { chainLabel, type FieldInfo, type SchemaIndex } from '../../lib/schema-index';
-
-const TRUNC: { unit: DateTruncUnit | 'FULL'; label: string }[] = [
-  { unit: 'FULL', label: 'Full date' },
-  { unit: 'DAY', label: 'Day' },
-  { unit: 'WEEK', label: 'Week' },
-  { unit: 'MONTH', label: 'Month' },
-  { unit: 'QUARTER', label: 'Quarter' },
-  { unit: 'YEAR', label: 'Year' },
-];
-
-const FN_LABEL: Record<AggregateFunction, string> = {
-  SUM: 'Sum', AVG: 'Average', MIN: 'Min', MAX: 'Max', COUNT: 'Count', COUNT_DISTINCT: 'Count unique',
-  ANY_VALUE: 'Sample', STRING_AGG: 'Combined', P25: '25th percentile', P50: 'Median', P75: '75th percentile', P95: '95th percentile',
-};
-
-function aggregationsFor(field: FieldInfo): AggregateFunction[] {
-  if (field.allowedAggregations?.length) return field.allowedAggregations;
-  if (field.kind === 'number') return ['SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNT_DISTINCT'];
-  if (field.kind === 'date') return ['MIN', 'MAX', 'COUNT_DISTINCT'];
-  if (field.kind === 'text') return ['COUNT', 'COUNT_DISTINCT'];
-  return [];
-}
+import { chainLabel, type SchemaIndex } from '../../lib/schema-index';
 
 export interface ColumnHeaderProps {
   out: OutputColumn;
@@ -103,7 +82,7 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel>Date bucket</DropdownMenuLabel>
                   <DropdownMenuRadioGroup value={current?.dateTrunc ?? 'FULL'} onValueChange={(v) => onSetDateTrunc(name, v === 'FULL' ? undefined : (v as DateTruncUnit))}>
-                    {TRUNC.map((t) => (
+                    {TRUNC_OPTIONS.map((t) => (
                       <DropdownMenuRadioItem key={t.unit} value={t.unit}>
                         {t.label}
                       </DropdownMenuRadioItem>
@@ -121,7 +100,7 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
           {out.automatic && ' · Automatic'}
         </div>
       )}
-      {current?.dateTrunc && <div className='text-xs text-primary'>{TRUNC.find((t) => t.unit === current.dateTrunc)?.label}</div>}
+      {current?.dateTrunc && <div className='text-xs text-primary'>{TRUNC_OPTIONS.find((t) => t.unit === current.dateTrunc)?.label}</div>}
       {filters.map((f) => (
         <span key={f.id} className='mt-1 inline-flex items-center gap-1 text-xs text-foreground'>
           {describeFilter(f, field?.kind)}

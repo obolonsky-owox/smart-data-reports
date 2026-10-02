@@ -406,7 +406,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onToggleField={toggleField}
       onIncludePath={(path) => edit((d) => includePath(d, path))}
       onChangeInstancePath={changePath}
-      onAddFilter={requestFilter}
+      onSetAggregations={(column, fns) => edit((d) => setAggregations(d, column, fns))}
+      onSetDateTrunc={(column, unit) => edit((d) => setDateTrunc(d, column, unit))}
       onSetDateRange={(column, range) => edit((d, i) => setDateRange(d, i, column, range))}
       onRemoveDateRange={(column) => edit((d) => removeDateRange(d, column))}
       onUpsertFilter={(filter) => edit((d) => upsertFilter(d, filter))}

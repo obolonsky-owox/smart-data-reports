@@ -13,7 +13,7 @@ if (!checkout) {
 
 const COMPONENTS = [
   'alert', 'alert-dialog', 'badge', 'button', 'checkbox', 'dialog', 'dropdown-menu', 'empty',
-  'input', 'popover', 'select', 'separator', 'sheet', 'skeleton', 'switch', 'tabs', 'tooltip',
+  'collapsible', 'input', 'popover', 'select', 'separator', 'sheet', 'skeleton', 'switch', 'tabs', 'tooltip',
 ];
 const LIB = ['utils.ts', 'dismissable-portals.ts'];
 const DEST = 'ui/vendor/owox-ui';

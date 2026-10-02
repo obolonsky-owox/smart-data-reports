@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, CircleHelp, Filter, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleHelp, Search } from 'lucide-react';
 import { Button } from '@owox/ui/components/button';
-import { Checkbox } from '@owox/ui/components/checkbox';
 import { Input } from '@owox/ui/components/input';
+import { Switch } from '@owox/ui/components/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@owox/ui/components/tooltip';
-import type { DataMartSummary } from '../../lib/odm-types';
-import { usedInstances, type ReportDraft } from '../../lib/report-draft';
+import type { AggregateFunction, DataMartSummary, DateTruncUnit } from '../../lib/odm-types';
+import { usedInstances, type DraftFilter, type ReportDraft } from '../../lib/report-draft';
 import { chain, chainLabel, type AliasPath, type FieldInfo, type InstanceInfo, type MartGroup, type SchemaIndex } from '../../lib/schema-index';
+import { FieldRow } from './FieldRow';
 import { PathDialog } from './PathDialog';
-import { TypeBadge } from './TypeBadge';
 
 type PathRequest =
   | { kind: 'add-field'; group: MartGroup; originalName: string }
@@ -22,11 +22,16 @@ export interface AllFieldsTabProps {
   onToggleField(name: string, checked: boolean): void;
   onIncludePath(path: AliasPath): void;
   onChangeInstancePath(from: AliasPath, to: AliasPath): void;
-  onAddFilter(name: string): void;
+  onSetAggregations(column: string, fns: AggregateFunction[] | undefined): void;
+  onSetDateTrunc(column: string, unit: DateTruncUnit | undefined): void;
+  onUpsertFilter(filter: DraftFilter): void;
+  onRemoveFilter(id: string): void;
 }
 
-export function AllFieldsTab({ index, draft, marts, onToggleField, onIncludePath, onChangeInstancePath, onAddFilter }: AllFieldsTabProps) {
+export function AllFieldsTab(props: AllFieldsTabProps) {
+  const { index, draft, marts, onToggleField, onIncludePath, onChangeInstancePath } = props;
   const [query, setQuery] = useState('');
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([index.mainDataMartId]));
   const [request, setRequest] = useState<PathRequest | null>(null);
 
@@ -35,6 +40,7 @@ export function AllFieldsTab({ index, draft, marts, onToggleField, onIncludePath
   const main = index.instances.get('')!;
   const needle = query.trim().toLowerCase();
   const matches = (f: FieldInfo) => !needle || f.label.toLowerCase().includes(needle) || f.name.toLowerCase().includes(needle);
+  const visible = (f: FieldInfo) => matches(f) && (!selectedOnly || selected.has(f.name));
   const unreachable = marts.filter((m) => !index.groups.some((g) => g.dataMartId === m.id));
 
   const toggleGroup = (id: string) =>
@@ -74,17 +80,23 @@ export function AllFieldsTab({ index, draft, marts, onToggleField, onIncludePath
 
   return (
     <div className='flex flex-col'>
-      <div className='relative px-3 py-2'>
-        <Search className='pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-        <Input type='search' aria-label='Search fields' placeholder='Search' className='h-8 pl-8' value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className='flex flex-col gap-1 px-3 py-2'>
+        <div className='relative'>
+          <Search className='pointer-events-none absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+          <Input type='search' aria-label='Search fields' placeholder='Search' className='h-8 pl-8' value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <label className='flex cursor-pointer items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground'>
+          <Switch className='scale-75' checked={selectedOnly} onCheckedChange={setSelectedOnly} />
+          Show selected only
+        </label>
       </div>
 
       {index.groups.map((group) => {
         const usedInGroup = group.instances.filter((i) => used.has(i.aliasPath));
         const shown = usedInGroup.length ? usedInGroup : group.instances.slice(0, 1);
         const unused = group.instances.filter((i) => !used.has(i.aliasPath));
-        const anyMatch = shown.some((i) => i.fields.some(matches));
-        if (needle && !anyMatch) return null;
+        const anyVisible = shown.some((i) => i.fields.some(visible));
+        if ((needle || selectedOnly) && !anyVisible) return null;
         const isOpen = !!needle || expanded.has(group.dataMartId) || usedInGroup.length > 0;
         return (
           <section key={group.dataMartId} className='border-b border-border last:border-b-0'>
@@ -111,71 +123,52 @@ export function AllFieldsTab({ index, draft, marts, onToggleField, onIncludePath
             </div>
 
             {isOpen &&
-              shown.map((instance) => (
-                <div key={instance.aliasPath} className='pb-2'>
-                  {instance.aliasPath !== '' && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type='button'
-                          className='ml-9 rounded-sm px-1 text-xs text-muted-foreground hover:text-foreground'
-                          onClick={() =>
-                            group.instances.length > 1 &&
-                            setRequest({ kind: 'change', group, from: instance.aliasPath, instances: group.instances.filter((i) => i.aliasPath === instance.aliasPath || !used.has(i.aliasPath)) })
-                          }
-                        >
-                          via {chainLabel(index, instance.aliasPath)}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className='max-w-xs'>
-                        {chain(index, instance.aliasPath).map((hop) => (
-                          <p key={hop.aliasPath}>
-                            {hop.label}: {hop.joinDescription || 'No description.'}
-                          </p>
-                        ))}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {instance.fields.filter(matches).map((field) => {
-                    const id = `field-${field.name}`;
-                    return (
-                      <div key={field.name} className='group flex items-center gap-2 rounded-md px-3 py-1 hover:bg-accent'>
-                        <TypeBadge kind={field.kind} />
-                        <Checkbox
-                          id={id}
-                          checked={selected.has(field.name)}
-                          onCheckedChange={(checked) => handleToggle(group, instance, field, checked === true)}
-                          aria-label={`${field.label} (${usedInGroup.length ? instance.label : group.title})`}
-                        />
-                        <label htmlFor={id} className='flex-1 truncate text-sm'>
-                          {field.label}
-                        </label>
-                        {field.description && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button type='button' aria-label={`About ${field.label}`} className='text-muted-foreground'>
-                                <CircleHelp className='h-4 w-4' />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className='max-w-xs'>{field.description}</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {field.kind !== 'date' && (
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-                            aria-label={`Filter by ${field.label}`}
-                            onClick={() => onAddFilter(field.name)}
+              shown
+                .filter((instance) => !selectedOnly || instance.fields.some(visible))
+                .map((instance) => (
+                  <div key={instance.aliasPath} className='px-2 pb-2'>
+                    {instance.aliasPath !== '' && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type='button'
+                            className='rounded-sm px-1 text-xs text-muted-foreground hover:text-foreground'
+                            onClick={() =>
+                              group.instances.length > 1 &&
+                              setRequest({ kind: 'change', group, from: instance.aliasPath, instances: group.instances.filter((i) => i.aliasPath === instance.aliasPath || !used.has(i.aliasPath)) })
+                            }
                           >
-                            <Filter className='h-4 w-4' />
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                            via {chainLabel(index, instance.aliasPath)}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className='max-w-xs'>
+                          {chain(index, instance.aliasPath).map((hop) => (
+                            <p key={hop.aliasPath}>
+                              {hop.label}: {hop.joinDescription || 'No description.'}
+                            </p>
+                          ))}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {instance.fields.filter(visible).map((field) => (
+                      <FieldRow
+                        key={field.name}
+                        field={field}
+                        checkboxLabel={`${field.label} (${usedInGroup.length ? instance.label : group.title})`}
+                        checked={selected.has(field.name)}
+                        column={draft.columns.find((c) => c.name === field.name)}
+                        filters={draft.filters.filter((f) => f.column === field.name)}
+                        martLabel={instance.aliasPath ? instance.label : undefined}
+                        mainTitle={main.title}
+                        onToggle={(checked) => handleToggle(group, instance, field, checked)}
+                        onSetAggregations={props.onSetAggregations}
+                        onSetDateTrunc={props.onSetDateTrunc}
+                        onUpsertFilter={props.onUpsertFilter}
+                        onRemoveFilter={props.onRemoveFilter}
+                      />
+                    ))}
+                  </div>
+                ))}
           </section>
         );
       })}
