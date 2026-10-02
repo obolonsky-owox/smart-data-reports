@@ -56,15 +56,58 @@ function reportBody(target: ReportTarget) {
   };
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+/** Keeps a raw list item only if it is a published data mart available for reporting. */
+function reportableMart(item: unknown): DataMartSummary | null {
+  if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
+  if (item.status !== 'PUBLISHED' || item.availableForReporting !== true) return null;
+  const storage = isRecord(item.storage) && typeof item.storage.type === 'string' ? item.storage.type : '';
+  return {
+    id: item.id,
+    title: item.title,
+    description: typeof item.description === 'string' ? item.description : null,
+    status: 'PUBLISHED',
+    availableForReporting: true,
+    storage: { type: storage },
+  };
+}
+
+/** Pages `/api/data-marts` without the client's strict validation of every item. */
+async function listDataMartsLeniently(owox: OwoxClient): Promise<DataMartSummary[]> {
+  const marts: DataMartSummary[] = [];
+  const seen = new Set<number>();
+  let offset = 0;
+  for (;;) {
+    if (seen.has(offset)) throw new Error(`OWOX Data Marts API returned repeated nextOffset ${offset}`);
+    seen.add(offset);
+    const page = await owox.getJson<{ items?: unknown; nextOffset?: unknown }>(
+      '/api/data-marts',
+      offset === 0 ? undefined : { offset: String(offset) },
+    );
+    for (const item of Array.isArray(page?.items) ? page.items : []) {
+      const mart = reportableMart(item);
+      if (mart) marts.push(mart);
+    }
+    if (typeof page?.nextOffset !== 'number') return marts;
+    offset = page.nextOffset;
+  }
+}
+
 export function createOdmApi(owox: OwoxClient) {
   const getReport = (reportId: string) => owox.getJson<ReportSummary>(`/api/reports/${enc(reportId)}`);
 
   return {
     async listDataMarts(): Promise<DataMartSummary[]> {
-      const all = await owox.dataMarts.list();
-      return all
-        .filter((m) => m.status === 'PUBLISHED' && m.availableForReporting)
-        .sort((a, b) => a.title.localeCompare(b.title));
+      let all: DataMartSummary[];
+      try {
+        all = (await owox.dataMarts.list()).filter((m) => m.status === 'PUBLISHED' && m.availableForReporting);
+      } catch {
+        // The client rejects the whole list over one item it doesn't recognise, e.g. a new storage type.
+        all = await listDataMartsLeniently(owox);
+      }
+      return all.sort((a, b) => a.title.localeCompare(b.title));
     },
 
     getBlendableSchema: (dataMartId: string) =>

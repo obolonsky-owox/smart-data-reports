@@ -19,12 +19,14 @@ export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
-    try {
-      const [reports, marts] = await Promise.all([store.listAll(), api.listDataMarts()]);
-      setState({ status: 'ready', reports, martTitles: new Map(marts.map((m) => [m.id, m.title])) });
-    } catch (error) {
-      setState({ status: 'error', error: describeError(error, 'saved reports') });
+    // Data mart titles are a nicety: without them the reports still list as "Unavailable data mart".
+    const [reports, marts] = await Promise.allSettled([store.listAll(), api.listDataMarts()]);
+    if (reports.status === 'rejected') {
+      setState({ status: 'error', error: describeError(reports.reason, 'saved reports') });
+      return;
     }
+    const titles = marts.status === 'fulfilled' ? marts.value.map((m): [string, string] => [m.id, m.title]) : [];
+    setState({ status: 'ready', reports: reports.value, martTitles: new Map(titles) });
   }, [store, api]);
 
   useEffect(() => {

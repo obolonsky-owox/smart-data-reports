@@ -37,3 +37,11 @@ it('shows an error with a working retry', async () => {
   await userEvent.click(screen.getByRole('button', { name: /retry/i }));
   expect(await screen.findByText('Build your first report')).toBeInTheDocument();
 });
+
+it('still lists saved reports when data marts fail to load', async () => {
+  __mock.seedReport('r1', { schemaVersion: 1, title: 'Visitors by source', draft: emptyDraft(DM.visitor), createdBy: 'demo-user', updatedBy: 'demo-user' });
+  __mock.fail('/api/data-marts', { code: 'HTTP_ERROR', status: 500, message: 'boom' }, 'GET');
+  renderWithServices(<ReportsListPage onOpen={vi.fn()} onCreate={vi.fn()} />, await mockServices());
+  expect(await screen.findByText('Visitors by source')).toBeInTheDocument();
+  expect(screen.getByText('Unavailable data mart')).toBeInTheDocument();
+});

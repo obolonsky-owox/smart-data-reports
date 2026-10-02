@@ -106,6 +106,34 @@ it('lists only published data marts available for reporting, by title', async ()
   expect((await createOdmApi(owox).listDataMarts()).map((m) => m.title)).toEqual(['Alpha', 'Zeta']);
 });
 
+it('falls back to raw pages when the client rejects one unexpected data mart', async () => {
+  const pages: Record<string, unknown> = {
+    '': { items: [{ ...DATA_MARTS[0]!, title: 'Zeta', storage: { type: 'NEW_WAREHOUSE' } }, { id: 'broken' }], total: 4, nextOffset: 2 },
+    '2': {
+      items: [
+        { id: 'dm-a', title: 'Alpha', status: 'PUBLISHED', availableForReporting: true },
+        { id: 'dm-d', title: 'Draft', status: 'DRAFT', availableForReporting: true },
+        { id: 'dm-h', title: 'Hidden', status: 'PUBLISHED', availableForReporting: false },
+      ],
+      total: 5,
+      nextOffset: null,
+    },
+  };
+  const queries: (Record<string, string> | undefined)[] = [];
+  const { owox } = fakeOwox({
+    dataMarts: { list: async () => { throw new Error('OWOX Data Marts API returned an unexpected response shape'); }, traverseData: async () => traversal([]) },
+    getJson: async <T,>(path: string, query?: Record<string, string>) => {
+      expect(path).toBe('/api/data-marts');
+      queries.push(query);
+      return pages[query?.offset ?? ''] as T;
+    },
+  });
+  const marts = await createOdmApi(owox).listDataMarts();
+  expect(marts.map((m) => m.id)).toEqual(['dm-a', DATA_MARTS[0]!.id]);
+  expect(marts[0]).toEqual({ id: 'dm-a', title: 'Alpha', description: null, status: 'PUBLISHED', availableForReporting: true, storage: { type: '' } });
+  expect(queries).toEqual([undefined, { offset: '2' }]);
+});
+
 it('creates and updates Google Sheets reports with the read plan', async () => {
   const { owox, calls } = fakeOwox();
   const api = createOdmApi(owox);
