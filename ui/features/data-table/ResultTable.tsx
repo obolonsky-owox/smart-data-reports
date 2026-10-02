@@ -154,7 +154,7 @@ export function ResultTable(props: ResultTableProps) {
           </div>
           <div className='flex items-center justify-end gap-2 text-sm text-muted-foreground'>
             <span>
-              {first}–{last} of {formatCount(total)}
+              {formatCount(first)}–{formatCount(last)} of {formatCount(total)}
             </span>
             <Button variant='ghost' size='icon' aria-label='Previous page' disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
               <ChevronLeft className='h-4 w-4' />

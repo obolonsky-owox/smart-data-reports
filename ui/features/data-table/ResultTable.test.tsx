@@ -38,7 +38,8 @@ it('shows 100 rows per page and pages without re-querying', async () => {
 });
 
 it('points to Google Sheets when the result hits the cap', async () => {
-  const h = setup({ ...success(sampleRows(['email'], 2500)), result: { rows: sampleRows(['email'], 2500), truncated: true, runId: 'r1' } } as RunState);
+  const rows = sampleRows(['email'], 2500);
+  const h = setup(success(rows, { result: { rows, truncated: true, runId: 'r1' } }));
   expect(screen.getByText('Showing the first 2,500 rows.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Create Google Sheets report' }));
   expect(h.onCreateSheets).toHaveBeenCalled();
@@ -58,7 +59,7 @@ it('explains an empty result', () => {
   expect(screen.getByText('No rows for this period')).toBeInTheDocument();
 });
 
-it('shows errors with retry and lets a running query be cancelled', async () => {
+it('shows errors with retry', async () => {
   const h = setup({ status: 'error', error: { message: "Couldn't reach OWOX Data Marts.", retryable: true }, appliedHash: 'h' });
   await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
   expect(h.onRetry).toHaveBeenCalled();
@@ -69,4 +70,43 @@ it('sorts from the column menu', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Column options for Email' }));
   await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Z → A' }));
   expect(h.onSort).toHaveBeenCalledWith('email', 'desc');
+});
+
+it('shows the running state and cancels', async () => {
+  const h = setup({ status: 'running', appliedHash: 'h' });
+  expect(screen.getByText('Running query…')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(h.onCancel).toHaveBeenCalled();
+});
+
+it('says when a query was cancelled', () => {
+  setup({ status: 'idle', cancelled: true });
+  expect(screen.getByText('Query cancelled')).toBeInTheDocument();
+});
+
+it('renders booleans and objects as text', () => {
+  setup(success([{ email: true, visits: { a: [1, 2] } }]));
+  expect(screen.getByText('true')).toBeInTheDocument();
+  expect(screen.getByText('{"a":[1,2]}')).toBeInTheDocument();
+});
+
+it('marks the selected aggregation per output column', async () => {
+  const d: ReportDraft = { ...draft, columns: [{ name: 'visits', aliasPath: '', aggregations: ['SUM', 'AVG'] }] };
+  setup(success([{ 'visits | SUM': 1, 'visits | AVG': 2 }], { appliedDraft: d }), d);
+  await userEvent.click(screen.getAllByRole('button', { name: 'Column options for Visits' })[1]);
+  expect(await screen.findByRole('menuitemradio', { name: 'Average' })).toBeChecked();
+  expect(screen.getByRole('menuitemradio', { name: 'Sum' })).not.toBeChecked();
+});
+
+it('hides None for automatic aggregations', async () => {
+  setup(success([{ 'visits | SUM': 1 }]));
+  await userEvent.click(screen.getByRole('button', { name: 'Column options for Visits' }));
+  expect(await screen.findByRole('menuitemradio', { name: 'Sum' })).toBeChecked();
+  expect(screen.queryByRole('menuitemradio', { name: 'None' })).not.toBeInTheDocument();
+});
+
+it('formats the range with thousands separators', async () => {
+  setup(success(sampleRows(['email'], 2500)));
+  for (let i = 0; i < 10; i++) await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(screen.getByText('1,001–1,100 of 2,500')).toBeInTheDocument();
 });

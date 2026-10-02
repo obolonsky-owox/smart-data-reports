@@ -85,7 +85,7 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel>Aggregation</DropdownMenuLabel>
                   <DropdownMenuRadioGroup
-                    value={current?.aggregations?.[0] ?? out.fn ?? 'none'}
+                    value={out.fn ?? current?.aggregations?.[0] ?? 'none'}
                     onValueChange={(v) => onSetAggregations(name, v === 'none' ? undefined : [v as AggregateFunction])}
                   >
                     {/* HTTP Data cannot opt out of ODM's automatic aggregation, so None is hidden then. */}
