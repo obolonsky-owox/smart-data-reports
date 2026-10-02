@@ -68,6 +68,19 @@ it('routes a capped result to a Google Sheets report and then shows its SQL', as
   expect(screen.getByRole('button', { name: 'Update Google Sheets' })).toBeInTheDocument();
 });
 
+it('links a new Google Sheets report before its first run, so a failed run offers Update', async () => {
+  await startVisitorReport();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Create Google Sheets report' }));
+  const dialog = await screen.findByRole('dialog');
+  __mock.fail('/api/reports/', { code: 'HTTP_ERROR', status: 500, message: 'boom' }, 'GET');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Create report' }));
+  expect(await within(dialog).findByRole('button', { name: 'Update report' })).toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Create report' })).not.toBeInTheDocument();
+  const saved = [...reports().values()][0]!.document as StoredReport;
+  expect(saved.linkedReport).toMatchObject({ reportId: 'report-2', dataMartId: DM.visitor });
+});
+
 it('blocks Apply and explains when a saved column no longer exists', async () => {
   __mock.seedReport('r1', {
     schemaVersion: 1, title: 'Old', createdBy: 'demo-user', updatedBy: 'demo-user',

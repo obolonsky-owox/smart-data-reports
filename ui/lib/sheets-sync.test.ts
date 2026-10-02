@@ -31,6 +31,14 @@ it('creates a spreadsheet, a report with the read plan, and runs it', async () =
   expect(calls[1]?.[2]).toMatchObject({ title: 'Visitors', spreadsheetId: 'sheet-1', sheetId: 7, config: { columnConfig: ['email'] } });
 });
 
+it('hands over the link before running, so a failed run leaves no orphan', async () => {
+  const { api, calls } = fakeApi({ runReportAndWait: async () => { throw new Error('polling failed'); } });
+  const onLinked = vi.fn(async () => void calls.push(['linked']));
+  await expect(createLinkedReport(api, { title: 'Visitors', destinationId: 'dest-1', draft }, {}, onLinked)).rejects.toThrow('polling failed');
+  expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ reportId: 'report-1', spreadsheetId: 'sheet-1', syncedDraftHash: configHash(draft) }));
+  expect(calls.map((c) => c[0])).toEqual(['createSpreadsheet', 'createReport', 'linked']);
+});
+
 it('updates the same report and spreadsheet', async () => {
   const { api, calls } = fakeApi();
   const linked = { reportId: 'report-1', destinationId: 'dest-1', spreadsheetId: 'sheet-1', sheetId: 7, syncedDraftHash: 'old' };

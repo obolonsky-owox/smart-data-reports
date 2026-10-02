@@ -60,3 +60,15 @@ it('creates a linked Google Sheets report and then keeps it in sync on save', as
   expect(__mock.state.requests.some((r) => r.method === 'PUT' && r.path === '/api/reports/report-2')).toBe(true);
   expect(result.current.saved?.linkedReport?.spreadsheetId).toBe('sheet-1');
 });
+
+it('keeps the link when the first run of a new Google Sheets report fails', async () => {
+  const services = await mockServices();
+  const { result } = renderHook(() => useReportDocument(undefined), { wrapper: wrapperFor(services) });
+  act(() => result.current.setDraft(visitorDraft()));
+  __mock.fail('/api/reports/', { code: 'HTTP_ERROR', status: 500, message: 'boom' }, 'GET');
+  await act(async () => {
+    await expect(result.current.createSheetsReport({ title: 'Visitors', destinationId: 'dest-sheets' })).rejects.toThrow();
+  });
+  expect(result.current.saved?.linkedReport).toMatchObject({ reportId: 'report-2', spreadsheetId: 'sheet-1', dataMartId: DM.visitor });
+  expect(result.current.saved?.title).toBe('Visitors');
+});

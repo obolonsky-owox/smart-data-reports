@@ -15,6 +15,8 @@ interface SheetsReportDialogProps {
   mode: 'create' | 'update';
   defaultTitle: string;
   dataMartId: string;
+  /** The saved report's current link; it appears mid-create once the ODM report exists. */
+  linked?: LinkedReport;
   onCreate(input: { title: string; destinationId: string }): Promise<SyncOutcome>;
   onUpdate(): Promise<SaveOutcome>;
   onClose(): void;
@@ -30,7 +32,7 @@ type Step =
 const DELETED_MESSAGE = 'The Google Sheets report was deleted in ODM. Create a new one to keep a spreadsheet in sync.';
 const DROPPED_MESSAGE = "This Google Sheets report reads the previous data mart, so it's no longer linked. Create a new one for this data mart.";
 
-export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId, onCreate, onUpdate, onClose }: SheetsReportDialogProps) {
+export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId, linked, onCreate, onUpdate, onClose }: SheetsReportDialogProps) {
   const { api, projectId, openExternal, navigate } = useServices();
   const [mode, setMode] = useState(initialMode);
   const [step, setStep] = useState<Step>({ kind: 'form' });
@@ -78,6 +80,17 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
     }
   }
 
+  // Once the ODM report exists, a failed create is finished with Update, never a second Create.
+  const resumed = mode === 'create' && !!linked && (step.kind === 'form' || step.kind === 'error');
+  const actionMode = resumed ? 'update' : mode;
+  // The run carries on in ODM without the dialog, so it may be closed once the link is stored.
+  const canClose = step.kind !== 'working' || !!linked;
+  const openInOdm = (
+    <Button variant='outline' className='w-fit' onClick={() => navigate(odmReportsPath(projectId, dataMartId))}>
+      Open report in ODM
+    </Button>
+  );
+
   const doneMessage = (s: Extract<Step, { kind: 'done' }>) =>
     s.runStatus === 'SUCCESS'
       ? 'Your Google Sheets report is ready.'
@@ -86,12 +99,12 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
         : `The report was saved, but its run failed${s.runError ? `: ${s.runError}` : '.'}`;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && step.kind !== 'working' && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && canClose && onClose()}>
       <DialogContent className='sm:max-w-[520px]'>
         <DialogHeader>
-          <DialogTitle>{mode === 'create' ? 'Create Google Sheets report' : 'Update Google Sheets'}</DialogTitle>
+          <DialogTitle>{actionMode === 'create' ? 'Create Google Sheets report' : 'Update Google Sheets'}</DialogTitle>
           <DialogDescription>
-            {mode === 'create'
+            {actionMode === 'create'
               ? 'ODM creates a new spreadsheet and fills it with this configuration — no 2,500-row limit, and you get the SQL too.'
               : 'Push the current configuration into the same spreadsheet and run the report.'}
           </DialogDescription>
@@ -133,11 +146,21 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
           </div>
         )}
 
-        {step.kind === 'working' && (
-          <p className='flex items-center gap-2 text-sm text-muted-foreground'>
-            <Loader2 className='h-4 w-4 animate-spin text-primary' />
-            {mode === 'create' ? 'Creating the spreadsheet and running the report…' : 'Updating the report and running it…'}
-          </p>
+        {step.kind === 'working' && mode === 'create' && linked ? (
+          <div className='flex flex-col gap-2 text-sm'>
+            <p className='flex items-center gap-2 text-muted-foreground'>
+              <Loader2 className='h-4 w-4 animate-spin text-primary' />
+              The report is still running. Open it in ODM to follow its progress.
+            </p>
+            {openInOdm}
+          </div>
+        ) : (
+          step.kind === 'working' && (
+            <p className='flex items-center gap-2 text-sm text-muted-foreground'>
+              <Loader2 className='h-4 w-4 animate-spin text-primary' />
+              {mode === 'create' ? 'Creating the spreadsheet and running the report…' : 'Updating the report and running it…'}
+            </p>
+          )
         )}
 
         {step.kind === 'done' && (
@@ -153,9 +176,7 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
                   Open spreadsheet
                 </Button>
               )}
-              <Button variant='outline' onClick={() => navigate(odmReportsPath(projectId, dataMartId))}>
-                Open report in ODM
-              </Button>
+              {openInOdm}
             </div>
           </div>
         )}
@@ -176,22 +197,33 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
           </div>
         )}
 
-        {step.kind === 'error' && <p className='text-sm text-destructive'>{step.message}</p>}
+        {step.kind === 'error' && (
+          <div className='flex flex-col gap-2 text-sm'>
+            <p className='text-destructive'>{step.message}</p>
+            {resumed && openInOdm}
+          </div>
+        )}
 
         <DialogFooter>
           {step.kind === 'done' || step.kind === 'missing' ? (
             <Button onClick={onClose}>Done</Button>
           ) : (
             <>
-              <Button variant='outline' disabled={step.kind === 'working'} onClick={onClose}>
-                Cancel
+              <Button variant='outline' disabled={!canClose} onClick={onClose}>
+                {step.kind === 'working' ? 'Close' : 'Cancel'}
               </Button>
-              {mode === 'create' ? (
+              {actionMode === 'create' ? (
                 <Button disabled={step.kind === 'working' || !destinationId} onClick={() => void create()}>
                   Create report
                 </Button>
               ) : (
-                <Button disabled={step.kind === 'working'} onClick={() => void update()}>
+                <Button
+                  disabled={step.kind === 'working'}
+                  onClick={() => {
+                    setMode('update');
+                    void update();
+                  }}
+                >
                   Update report
                 </Button>
               )}

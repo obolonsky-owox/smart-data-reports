@@ -1,7 +1,9 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import { TooltipProvider } from '@owox/ui/components/tooltip';
 import userEvent from '@testing-library/user-event';
 import { DM } from '../../fixtures/smart-data';
 import { __mock, __resetForTests } from '../../sdk-mock';
+import { ServicesProvider } from '../../services';
 import { mockServices, renderWithServices } from '../../test/render';
 import { SheetsReportDialog } from './SheetsReportDialog';
 
@@ -53,4 +55,31 @@ it('offers a new Google Sheets report when the main data mart changed', async ()
   expect(await screen.findByText(/reads the previous data mart, so it's no longer linked/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Create a new one' }));
   expect(await screen.findByRole('button', { name: 'Create report' })).toBeInTheDocument();
+});
+
+it('never offers a second Create once the report exists, and can be closed while it runs', async () => {
+  let fail!: (error: Error) => void;
+  const onCreate = vi.fn(() => new Promise<never>((_, reject) => (fail = reject)));
+  const onClose = vi.fn();
+  const services = await mockServices();
+  const props = { mode: 'create' as const, defaultTitle: 'Visitors', dataMartId: DM.visitor, onCreate, onUpdate: vi.fn(), onClose };
+  const { rerender } = renderWithServices(<SheetsReportDialog {...props} />, services);
+  await userEvent.click(await screen.findByRole('button', { name: 'Create report' }));
+  // The editor passes the link down as soon as it is saved, before the run finishes.
+  rerender(
+    <ServicesProvider services={services}>
+      <TooltipProvider>
+        <SheetsReportDialog {...props} linked={linked} />
+      </TooltipProvider>
+    </ServicesProvider>,
+  );
+  expect(screen.getByText('The report is still running. Open it in ODM to follow its progress.')).toBeInTheDocument();
+  // The dialog's own X button is also named Close; the footer one is last.
+  await userEvent.click(screen.getAllByRole('button', { name: 'Close' }).at(-1)!);
+  expect(onClose).toHaveBeenCalled();
+  await act(async () => fail(new Error('polling failed')));
+  expect(screen.queryByRole('button', { name: 'Create report' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Update report' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Open report in ODM' }));
+  expect(__mock.state.navigations).toEqual([`/ui/demo-project/data-marts/${DM.visitor}/reports`]);
 });

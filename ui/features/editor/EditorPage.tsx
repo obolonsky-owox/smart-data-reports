@@ -533,6 +533,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
           mode={sheets}
           defaultTitle={doc.title}
           dataMartId={draft.mainDataMartId}
+          linked={linked}
           onCreate={(input) => doc.createSheetsReport(input)}
           onUpdate={() => doc.updateSheetsReport({ hasIssues: issues.length > 0 })}
           onClose={() => setSheets(null)}

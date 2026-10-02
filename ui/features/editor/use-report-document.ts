@@ -159,13 +159,13 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
   const createSheetsReport = useCallback(
     async ({ title: reportTitle, destinationId }: { title: string; destinationId: string }): Promise<SyncOutcome> => {
       await save({ title: reportTitle });
-      const outcome = await createLinkedReport(
+      // The link is stored as soon as the ODM report exists, before its first run is awaited.
+      return createLinkedReport(
         api,
         { title: reportTitle, destinationId, draft: draftRef.current! },
         { intervalMs: pollIntervalMs },
+        async (linked) => void (await save({ title: reportTitle, linkedReport: linked })),
       );
-      await save({ title: reportTitle, linkedReport: outcome.linked });
-      return outcome;
     },
     [api, save, pollIntervalMs],
   );

@@ -9,10 +9,15 @@ export type SheetsApi = Pick<OdmApi, 'createSpreadsheet' | 'createReport' | 'upd
 
 export interface SyncOutcome { linked: LinkedReport; runStatus: ReportRunStatus; runError?: string }
 
+/**
+ * Creates the spreadsheet and the ODM report, hands the link to `onLinked` so the caller can
+ * store it, and only then runs the report: a failed or abandoned run never orphans them.
+ */
 export async function createLinkedReport(
   api: SheetsApi,
   input: { title: string; destinationId: string; draft: ReportDraft; today?: Date },
   wait: WaitOptions = {},
+  onLinked: (linked: LinkedReport) => Promise<void> | void = () => undefined,
 ): Promise<SyncOutcome> {
   const sheet = await api.createSpreadsheet(input.destinationId, input.title);
   const config = toReportConfig(toReadPlan(input.draft, input.today));
@@ -23,19 +28,17 @@ export async function createLinkedReport(
     sheetId: sheet.sheetId,
     config,
   });
-  const run = await api.runReportAndWait(id, wait);
-  return {
-    linked: {
-      reportId: id,
-      destinationId: input.destinationId,
-      spreadsheetId: sheet.spreadsheetId,
-      sheetId: sheet.sheetId,
-      syncedDraftHash: configHash(input.draft),
-      dataMartId: input.draft.mainDataMartId,
-    },
-    runStatus: run.status,
-    runError: run.error,
+  const linked: LinkedReport = {
+    reportId: id,
+    destinationId: input.destinationId,
+    spreadsheetId: sheet.spreadsheetId,
+    sheetId: sheet.sheetId,
+    syncedDraftHash: configHash(input.draft),
+    dataMartId: input.draft.mainDataMartId,
   };
+  await onLinked(linked);
+  const run = await api.runReportAndWait(id, wait);
+  return { linked, runStatus: run.status, runError: run.error };
 }
 
 /** Pushes the current configuration into the same ODM report and spreadsheet, then runs it. */
