@@ -75,31 +75,41 @@ export function createOdmApi(owox: OwoxClient) {
 
     /** Streams at most ROW_CAP rows; every call is a billed HTTP_DATA run in ODM. */
     async runQuery(dataMartId: string, options: TraverseOptions, signal?: AbortSignal): Promise<QueryResult> {
+      if (signal?.aborted) throw abortError();
       const traversal = await owox.dataMarts.traverseData(dataMartId, options);
+      const iterator = traversal.rowChunks()[Symbol.asyncIterator]();
       const rows: Row[] = [];
       let truncated = false;
-      const onAbort = () => void traversal.cancel();
-      signal?.addEventListener('abort', onAbort, { once: true });
+      let onAbort: (() => void) | undefined;
+      // The real client's cancel() is a no-op once reading has started, so a pending
+      // next() is interrupted by racing it against this promise instead.
+      const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(abortError());
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener('abort', onAbort, { once: true });
+      });
+      aborted.catch(() => undefined);
       try {
-        if (signal?.aborted) throw abortError();
-        for await (const chunk of traversal.rowChunks()) {
-          if (signal?.aborted) throw abortError();
-          rows.push(...chunk);
+        for (;;) {
+          const step = await Promise.race([iterator.next(), aborted]);
+          if (step.done) break;
+          rows.push(...step.value);
           if (rows.length > ROW_CAP) {
             truncated = true;
+            await iterator.return?.();
             await traversal.cancel();
             break;
           }
         }
-        if (signal?.aborted) throw abortError();
       } catch (error) {
         if (signal?.aborted) {
-          await traversal.cancel();
+          void iterator.return?.()?.catch(() => undefined);
+          void traversal.cancel().catch(() => undefined);
           throw abortError();
         }
         throw error;
       } finally {
-        signal?.removeEventListener('abort', onAbort);
+        if (onAbort) signal?.removeEventListener('abort', onAbort);
       }
       return { rows: rows.slice(0, ROW_CAP), truncated, runId: traversal.runId };
     },

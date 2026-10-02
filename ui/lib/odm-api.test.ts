@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { DATA_MARTS, DM, sampleRows } from '../fixtures/smart-data';
 import { createOdmApi, type OwoxClient, type Traversal } from './odm-api';
 import { QUERY_LIMIT, type ReportConfig } from './read-plan';
@@ -61,13 +62,36 @@ describe('runQuery', () => {
     expect(t.cancelled).toBe(true);
   });
 
-  it('cancels the stream and rejects with AbortError when aborted', async () => {
-    const t = traversal(sampleRows(['email'], 3000), 10);
-    const { owox } = fakeOwox({ dataMarts: { list: async () => [], traverseData: async () => t } });
+  it('does not start a run when the signal is already aborted', async () => {
+    const traverseData = vi.fn(async () => traversal([]));
+    const { owox } = fakeOwox({ dataMarts: { list: async () => [], traverseData } });
     const controller = new AbortController();
     controller.abort();
     await expect(createOdmApi(owox).runQuery(DM.visitor, options, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
-    expect(t.cancelled).toBe(true);
+    expect(traverseData).not.toHaveBeenCalled();
+  });
+
+  it('keeps exactly 2,500 rows without truncation', async () => {
+    const { owox } = fakeOwox({ dataMarts: { list: async () => [], traverseData: async () => traversal(sampleRows(['email'], 2500)) } });
+    const result = await createOdmApi(owox).runQuery(DM.visitor, options);
+    expect(result.truncated).toBe(false);
+    expect(result.rows).toHaveLength(2500);
+  });
+
+  it('interrupts a stream that is waiting for the next chunk, like the real client', async () => {
+    const stuck: Traversal = {
+      runId: 'run-1',
+      async *rowChunks() {
+        yield sampleRows(['email'], 10);
+        await new Promise<never>(() => undefined);
+      },
+      async cancel() {},
+    };
+    const { owox } = fakeOwox({ dataMarts: { list: async () => [], traverseData: async () => stuck } });
+    const controller = new AbortController();
+    const pending = createOdmApi(owox).runQuery(DM.visitor, options, controller.signal);
+    setTimeout(() => controller.abort(), 10);
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 
