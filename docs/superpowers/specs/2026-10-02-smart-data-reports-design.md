@@ -123,7 +123,10 @@ interface DraftColumn {
 interface DraftDateRange {
   column: string;
   aliasPath: AliasPath;
-  range: DateRangePreset | { from: string; to: string } | 'all-time';
+  range:
+    | { kind: 'preset'; preset: DateRangePreset }
+    | { kind: 'custom'; from: string; to: string }
+    | { kind: 'all-time' };
   autoAdded: boolean;
 }
 
@@ -371,8 +374,10 @@ light/dark through `.dark` on `<html>`.
   their original imports. `VENDORED_FROM` records the source commit. `npm run sync:ui --
   <owox-data-marts checkout>` refreshes the copy; no hand edits in `ui/vendor/`.
 - **Stack matched to the product:** React 19, Vite 6, TypeScript 5.9, Tailwind CSS v4 (CSS-first),
-  shadcn/ui primitives generated into `ui/components/ui/` over Radix, `lucide-react`, TanStack
-  Table v8, `@xyflow/react` + `@dagrejs/dagre`, `@dnd-kit` for column reordering, Sonner toasts.
+  vendored shadcn/ui primitives over Radix (§9 Vendored UI), the design system's native Select,
+  `lucide-react`, `@xyflow/react` + `@dagrejs/dagre`, `@dnd-kit` for column reordering, Sonner
+  toasts. The result table is a plain table: client-side paging over at most 2,500 rows needs no
+  table library.
 - **Patterns used:** `dm-page` / `dm-page-header` / `dm-page-content`; `.dm-card` for the reports
   list; underline `Tabs` for page sections and pills `Tabs` in the panel; `Sheet` for the narrow
   layout; `Dialog` for path choice and Google Sheets; `AlertDialog` for destructive confirmations
