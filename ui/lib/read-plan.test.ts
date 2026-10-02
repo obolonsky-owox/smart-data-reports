@@ -93,6 +93,19 @@ describe('validateDraft', () => {
     );
   });
 
+  it('requires both dates of a custom period, in order', () => {
+    const withRange = (from: string, to: string): ReportDraft => {
+      const draft = add(emptyDraft(DM.visitor), 'email');
+      return { ...draft, dateRanges: draft.dateRanges.map((r) => ({ ...r, range: { kind: 'custom', from, to } })) };
+    };
+    expect(validateDraft(withRange('2026-01-01', ''), index, today)).toContainEqual({ kind: 'custom-range-incomplete', column: 'creation_date' });
+    expect(validateDraft(withRange('', '2026-01-01'), index, today)).toContainEqual({ kind: 'custom-range-incomplete', column: 'creation_date' });
+    expect(validateDraft(withRange('2026-02-01', '2026-01-01'), index, today)).toContainEqual({ kind: 'custom-range-reversed', column: 'creation_date' });
+    expect(validateDraft(withRange('2026-01-01', '2026-01-01'), index, today)).toEqual([]);
+    expect(describeIssue({ kind: 'custom-range-incomplete', column: 'creation_date' }, index)).toBe('Fill in both dates of every custom period.');
+    expect(describeIssue({ kind: 'custom-range-reversed', column: 'creation_date' }, index)).toBe("A period can't end before it starts.");
+  });
+
   it('flags a filter parameter longer than ODM accepts', () => {
     const draft = upsertFilter(add(emptyDraft(DM.visitor), 'email'), {
       id: 'long', column: 'email', aliasPath: '', operator: 'in',

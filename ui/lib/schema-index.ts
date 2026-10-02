@@ -51,7 +51,7 @@ export function fieldKind(type: string): FieldKind {
   const t = type.toUpperCase();
   if (/^(DATE|DATETIME|TIMESTAMP)/.test(t)) return 'date';
   if (/^(BOOL|BOOLEAN)$/.test(t)) return 'boolean';
-  if (/^(INT|INTEGER|INT64|BIGINT|SMALLINT|TINYINT|BYTEINT|FLOAT|FLOAT64|DOUBLE|REAL|NUMERIC|BIGNUMERIC|DECIMAL|NUMBER)\b/.test(t)) return 'number';
+  if (/^(INT|INTEGER|INT32|INT64|INT128|BIGINT|SMALLINT|TINYINT|BYTEINT|BYTE|SHORT|LONG|FLOAT|FLOAT32|FLOAT64|DOUBLE|REAL|NUMERIC|BIGNUMERIC|DECIMAL|NUMBER)\b/.test(t)) return 'number';
   if (/^(STRING|VARCHAR|CHAR|CHARACTER|TEXT)\b/.test(t)) return 'text';
   return 'other';
 }

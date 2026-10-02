@@ -126,7 +126,7 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
         <span key={f.id} className='mt-1 inline-flex items-center gap-1 text-xs text-foreground'>
           {describeFilter(f, field?.kind)}
           <button type='button' aria-label={`Remove filter ${label}`} className='text-muted-foreground hover:text-foreground' onClick={() => onRemoveFilter(f.id)}>
-            <X className='h-3 w-3' />
+            <X className='h-4 w-4' />
           </button>
         </span>
       ))}

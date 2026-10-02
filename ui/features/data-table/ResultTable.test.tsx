@@ -14,12 +14,12 @@ function success(rows: Record<string, unknown>[], extra: Partial<Extract<RunStat
   return { status: 'success', result: { rows, truncated: false, runId: 'r1' }, totals: null, appliedHash: 'h', appliedDraft: draft, ...extra };
 }
 
-function setup(run: RunState, d: ReportDraft = draft) {
+function setup(run: RunState, d: ReportDraft = draft, linked = false) {
   const handlers = {
     onSort: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(), onEditFilter: vi.fn(),
     onRemoveFilter: vi.fn(), onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(),
   };
-  renderUi(<ResultTable index={index} draft={d} run={run} stale={false} {...handlers} />);
+  renderUi(<ResultTable index={index} draft={d} run={run} stale={false} linked={linked} {...handlers} />);
   return handlers;
 }
 
@@ -41,7 +41,15 @@ it('points to Google Sheets when the result hits the cap', async () => {
   const rows = sampleRows(['email'], 2500);
   const h = setup(success(rows, { result: { rows, truncated: true, runId: 'r1' } }));
   expect(screen.getByText('Showing the first 2,500 rows.')).toBeInTheDocument();
+  expect(screen.getByText('Need more? Create a Google Sheets report with this configuration.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Create Google Sheets report' }));
+  expect(h.onCreateSheets).toHaveBeenCalled();
+});
+
+it('offers an update instead when the report is already linked to Google Sheets', async () => {
+  const rows = sampleRows(['email'], 2500);
+  const h = setup(success(rows, { result: { rows, truncated: true, runId: 'r1' } }), draft, true);
+  await userEvent.click(screen.getByRole('button', { name: 'Update Google Sheets' }));
   expect(h.onCreateSheets).toHaveBeenCalled();
 });
 

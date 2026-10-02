@@ -70,3 +70,15 @@ it('reorders and removes columns, and flags unavailable ones', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Remove column gone' }));
   expect(h.onRemoveColumn).toHaveBeenCalledWith('gone');
 });
+
+it('closes the + Date and + Filter menus after a pick', async () => {
+  const h = setup({ ...add(emptyDraft(DM.visitor), 'email'), dateRanges: [] });
+  await userEvent.click(within(screen.getByRole('region', { name: 'Date ranges' })).getByRole('button', { name: 'Date' }));
+  await userEvent.click(await screen.findByRole('button', { name: /^Creation Date/ }));
+  expect(h.onSetDateRange).toHaveBeenCalledWith('creation_date', { kind: 'preset', preset: 'last_30_days' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  await userEvent.click(within(screen.getByRole('region', { name: 'Filters' })).getByRole('button', { name: 'Filter' }));
+  await userEvent.click(await screen.findByRole('button', { name: /^Client ID/ }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('form', { name: 'Filter Client ID' })).toBeInTheDocument();
+});

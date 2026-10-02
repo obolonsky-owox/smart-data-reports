@@ -67,3 +67,11 @@ it('resets to idle and aborts the running query', async () => {
   expect(result.current.state).toEqual({ status: 'idle' });
   expect(signal?.aborted).toBe(true);
 });
+
+it("names the data mart when the query isn't allowed", async () => {
+  const forbidden = Object.assign(new Error('Forbidden'), { name: 'PluginTransportError', payload: { code: 'HTTP_ERROR', status: 403, message: 'Forbidden' } });
+  const api = { runQuery: vi.fn(async () => { throw forbidden; }), getRunTotals: vi.fn() } as unknown as OdmApi;
+  const { result } = renderHook(() => useQueryRun(api));
+  await act(async () => result.current.run(DM.visitor, draft('email'), 'Visitor'));
+  expect(result.current.state).toMatchObject({ status: 'error', error: { message: "You don't have access to Visitor." } });
+});

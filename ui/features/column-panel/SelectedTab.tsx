@@ -56,6 +56,8 @@ export function SelectedTab(props: SelectedTabProps) {
   const { index, draft, pendingFilterField, onPendingFilterDone } = props;
   const [editingFilter, setEditingFilter] = useState<string | null>(null);
   const [newFilterField, setNewFilterField] = useState<string | null>(null);
+  const [menu, setMenu] = useState<'date' | 'filter' | null>(null);
+  const menuProps = (name: 'date' | 'filter') => ({ open: menu === name, onOpenChange: (open: boolean) => setMenu(open ? name : null) });
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const main = index.instances.get('')!;
   const used = usedInstances(draft).map((p) => index.instances.get(p)).filter((i) => i !== undefined);
@@ -84,7 +86,7 @@ export function SelectedTab(props: SelectedTabProps) {
         title='Date ranges'
         action={
           addableDates.length > 0 && (
-            <Popover>
+            <Popover {...menuProps('date')}>
               <PopoverTrigger asChild>
                 <Button variant='ghost' size='sm' className='h-7 text-xs'>
                   <Plus className='h-4 w-4' />
@@ -93,7 +95,15 @@ export function SelectedTab(props: SelectedTabProps) {
               </PopoverTrigger>
               <PopoverContent className='w-64 p-1'>
                 {addableDates.map((f) => (
-                  <button key={f.name} type='button' className='flex w-full justify-between rounded-sm px-2 py-1 text-left text-sm hover:bg-accent' onClick={() => props.onSetDateRange(f.name, AUTO_DATE_RANGE)}>
+                  <button
+                    key={f.name}
+                    type='button'
+                    className='flex w-full justify-between rounded-sm px-2 py-1 text-left text-sm hover:bg-accent'
+                    onClick={() => {
+                      props.onSetDateRange(f.name, AUTO_DATE_RANGE);
+                      setMenu(null);
+                    }}
+                  >
                     {f.label}
                     <span className='text-xs text-muted-foreground'>{martLabel(f.aliasPath)}</span>
                   </button>
@@ -125,7 +135,7 @@ export function SelectedTab(props: SelectedTabProps) {
         title='Filters'
         action={
           filterable.length > 0 && (
-            <Popover>
+            <Popover {...menuProps('filter')}>
               <PopoverTrigger asChild>
                 <Button variant='ghost' size='sm' className='h-7 text-xs'>
                   <Plus className='h-4 w-4' />
@@ -134,7 +144,15 @@ export function SelectedTab(props: SelectedTabProps) {
               </PopoverTrigger>
               <PopoverContent className='max-h-72 w-64 overflow-y-auto p-1'>
                 {filterable.map((f) => (
-                  <button key={f.name} type='button' className='flex w-full justify-between rounded-sm px-2 py-1 text-left text-sm hover:bg-accent' onClick={() => setNewFilterField(f.name)}>
+                  <button
+                    key={f.name}
+                    type='button'
+                    className='flex w-full justify-between rounded-sm px-2 py-1 text-left text-sm hover:bg-accent'
+                    onClick={() => {
+                      setNewFilterField(f.name);
+                      setMenu(null);
+                    }}
+                  >
                     {f.label}
                     <span className='text-xs text-muted-foreground'>{martLabel(f.aliasPath)}</span>
                   </button>

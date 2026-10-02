@@ -11,6 +11,7 @@ describe('fieldKind', () => {
     ['DATE', 'date'], ['DATETIME', 'date'], ['TIMESTAMP_NTZ', 'date'], ['INTEGER', 'number'],
     ['FLOAT64', 'number'], ['NUMERIC', 'number'], ['BOOLEAN', 'boolean'], ['STRING', 'text'],
     ['VARCHAR(255)', 'text'], ['ARRAY<STRING>', 'other'], ['TIME', 'other'],
+    ['LONG', 'number'], ['SHORT', 'number'], ['BYTE', 'number'], ['INT32', 'number'], ['INT128', 'number'], ['FLOAT32', 'number'],
   ])('%s → %s', (type, kind) => expect(fieldKind(type)).toBe(kind));
 });
 

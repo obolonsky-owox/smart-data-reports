@@ -14,6 +14,8 @@ import { ColumnHeader, type ColumnHeaderProps } from './ColumnHeader';
 export interface ResultTableProps extends Omit<ColumnHeaderProps, 'out'> {
   run: RunState;
   stale: boolean;
+  /** The report already has a Google Sheets report, so the banner offers to update it. */
+  linked?: boolean;
   onCreateSheets(): void;
   onCancel(): void;
   onRetry(): void;
@@ -102,10 +104,10 @@ export function ResultTable(props: ResultTableProps) {
           <TriangleAlert className='h-4 w-4' />
           <AlertTitle>Showing the first {formatCount(ROW_CAP)} rows.</AlertTitle>
           <AlertDescription className='text-warning'>
-            <p>Need more? Create a Google Sheets report with this configuration — it has no row limit.</p>
+            <p>Need more? Create a Google Sheets report with this configuration.</p>
             <Button size='sm' className='mt-2' onClick={props.onCreateSheets}>
               <Sheet className='h-4 w-4' />
-              Create Google Sheets report
+              {props.linked ? 'Update Google Sheets' : 'Create Google Sheets report'}
             </Button>
           </AlertDescription>
         </Alert>

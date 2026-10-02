@@ -49,7 +49,7 @@ export function ColumnPanel(props: ColumnPanelProps) {
       <Tabs value={tab} onValueChange={setTab} className='flex min-h-0 flex-1 flex-col'>
         <TabsList className='mx-3 mt-3 grid grid-cols-2'>
           <TabsTrigger value='all'>All</TabsTrigger>
-          <TabsTrigger value='selected'>Selected {draft.columns.length}</TabsTrigger>
+          <TabsTrigger value='selected'>Selected ({draft.columns.length})</TabsTrigger>
         </TabsList>
         <TabsContent value='all' className='min-h-0 flex-1 overflow-y-auto'>
           <AllFieldsTab {...props} />

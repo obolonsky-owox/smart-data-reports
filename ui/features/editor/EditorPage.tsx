@@ -157,7 +157,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   function apply() {
     if (!draft || issues.length) return;
-    void query.run(draft.mainDataMartId, draft);
+    void query.run(draft.mainDataMartId, draft, mainMart?.title);
   }
 
   function report(outcome: SaveOutcome) {
@@ -445,6 +445,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   draft={draft}
                   run={query.state}
                   stale={stale}
+                  linked={!!linked}
                   onSort={(column, direction) => edit((d) => setSort(d, column, direction))}
                   onSetAggregations={(column, fns) => edit((d) => setAggregations(d, column, fns))}
                   onSetDateTrunc={(column, unit) => edit((d) => setDateTrunc(d, column, unit))}

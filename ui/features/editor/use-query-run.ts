@@ -19,7 +19,8 @@ export function useQueryRun(api: OdmApi, { totalsRetryMs = 3000 }: { totalsRetry
   const current = useRef<AbortController | null>(null);
 
   const run = useCallback(
-    async (dataMartId: string, draft: ReportDraft) => {
+    /** `subject` names the data mart in error messages, e.g. "You don't have access to Visitor." */
+    async (dataMartId: string, draft: ReportDraft, subject?: string) => {
       current.current?.abort();
       const controller = new AbortController();
       current.current = controller;
@@ -42,7 +43,7 @@ export function useQueryRun(api: OdmApi, { totalsRetryMs = 3000 }: { totalsRetry
         }
       } catch (error) {
         if (!isCurrent()) return;
-        setState({ status: 'error', error: describeError(error), appliedHash });
+        setState({ status: 'error', error: describeError(error, subject), appliedHash });
       }
     },
     [api, totalsRetryMs],

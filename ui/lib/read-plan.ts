@@ -39,6 +39,8 @@ export type DraftIssue =
   | { kind: 'no-columns' }
   | { kind: 'unknown-column'; column: string }
   | { kind: 'sort-not-selected'; column: string }
+  | { kind: 'custom-range-incomplete'; column: string }
+  | { kind: 'custom-range-reversed'; column: string }
   | { kind: 'filter-needs-value'; filterId: string }
   | { kind: 'too-many-values'; filterId: string }
   | { kind: 'too-long'; param: 'filter' | 'sort' | 'aggregation' | 'dateTrunc' };
@@ -119,6 +121,12 @@ export function validateDraft(draft: ReportDraft, index: SchemaIndex, today = ne
   for (const column of referenced) {
     if (!index.fields.has(column)) issues.push({ kind: 'unknown-column', column });
   }
+  for (const { column, range } of draft.dateRanges) {
+    if (range.kind !== 'custom') continue;
+    if (!range.from || !range.to) issues.push({ kind: 'custom-range-incomplete', column });
+    // ISO dates (YYYY-MM-DD) compare correctly as strings.
+    else if (range.from > range.to) issues.push({ kind: 'custom-range-reversed', column });
+  }
   const selected = new Set(draft.columns.map((c) => c.name));
   for (const sort of draft.sorts) {
     if (!selected.has(sort.column)) issues.push({ kind: 'sort-not-selected', column: sort.column });
@@ -149,6 +157,10 @@ export function describeIssue(issue: DraftIssue, index: SchemaIndex): string {
       const label = index.fields.get(issue.column)?.label ?? issue.column;
       return `The report is sorted by "${label}", which isn't one of its columns. Remove that sort or add the column.`;
     }
+    case 'custom-range-incomplete':
+      return 'Fill in both dates of every custom period.';
+    case 'custom-range-reversed':
+      return "A period can't end before it starts.";
     case 'filter-needs-value':
       return 'Fill in a value for every filter.';
     case 'too-many-values':

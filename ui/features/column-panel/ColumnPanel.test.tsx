@@ -38,6 +38,6 @@ it('shows issues and blocks Apply', async () => {
 
 it('opens the Selected tab with a filter editor when a filter is requested', () => {
   setup({ filterRequest: { field: 'email', nonce: 1 } });
-  expect(screen.getByRole('tab', { name: /selected/i })).toHaveAttribute('data-state', 'active');
+  expect(screen.getByRole('tab', { name: 'Selected (0)' })).toHaveAttribute('data-state', 'active');
   expect(screen.getByRole('form', { name: 'Filter Email' })).toBeInTheDocument();
 });
