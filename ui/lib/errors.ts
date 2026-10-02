@@ -8,16 +8,24 @@ export interface UserFacingError {
 
 interface TransportPayload { code: string; status?: number; message: string; details?: unknown }
 
-function transportPayload(error: unknown): TransportPayload | undefined {
+function findInCauseChain<T>(error: unknown, predicate: (candidate: unknown) => T | undefined): T | undefined {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current; depth += 1) {
-    const candidate = current as { name?: unknown; payload?: unknown; cause?: unknown };
-    if (candidate.name === 'PluginTransportError' && candidate.payload && typeof candidate.payload === 'object') {
-      return candidate.payload as TransportPayload;
-    }
-    current = candidate.cause;
+    const result = predicate(current);
+    if (result !== undefined) return result;
+    current = (current as { cause?: unknown }).cause;
   }
   return undefined;
+}
+
+function transportPayload(error: unknown): TransportPayload | undefined {
+  return findInCauseChain(error, (candidate) => {
+    const c = candidate as { name?: unknown; payload?: unknown };
+    if (c.name === 'PluginTransportError' && c.payload && typeof c.payload === 'object') {
+      return c.payload as TransportPayload;
+    }
+    return undefined;
+  });
 }
 
 function backendMessage(details: unknown): string | undefined {
@@ -35,7 +43,10 @@ export function errorStatus(error: unknown): number | undefined {
 }
 
 export function isAbortError(error: unknown): boolean {
-  return (error as { name?: unknown } | null)?.name === 'AbortError';
+  return findInCauseChain(error, (candidate) => {
+    const c = candidate as { name?: unknown };
+    return c.name === 'AbortError' ? true : undefined;
+  }) ?? false;
 }
 
 export function describeError(error: unknown, subject = 'this data'): UserFacingError {

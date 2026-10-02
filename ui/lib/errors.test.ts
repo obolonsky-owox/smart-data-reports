@@ -33,3 +33,12 @@ it('handles suspension, not-found, aborts and unknown failures', () => {
   expect(isAbortError(abort)).toBe(true);
   expect(describeError(new Error('boom'))).toEqual({ message: 'Something went wrong.', detail: 'boom', retryable: true, code: undefined, status: undefined });
 });
+
+it('recognises cancellations wrapped by the API client', () => {
+  const wrappedAbort = Object.assign(new Error('Failed to open OWOX Data Mart data stream'), {
+    name: 'OWOXApiError',
+    cause: Object.assign(new Error('Aborted'), { name: 'AbortError' }),
+  });
+  expect(isAbortError(wrappedAbort)).toBe(true);
+  expect(describeError(wrappedAbort)).toEqual({ message: 'The query was cancelled.', retryable: false, code: 'ABORTED' });
+});
