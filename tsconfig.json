@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node", "vite/client"],
     "baseUrl": ".",
     "paths": { "@owox/ui/*": ["./ui/vendor/owox-ui/*"] }
   },
