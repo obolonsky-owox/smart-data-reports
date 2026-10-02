@@ -58,7 +58,7 @@ export function coerceFilterValue(
   input: OperatorOption['input'],
   raw: string | { from: string; to: string },
 ): unknown {
-  const cast = (s: string) => (kind === 'number' ? Number(s) : s);
+  const cast = (s: string) => (kind === 'number' && s !== '' ? Number(s) : s);
   if (input === 'none') return undefined;
   if (input === 'range') {
     const range = raw as { from: string; to: string };
@@ -70,8 +70,8 @@ export function coerceFilterValue(
   return cast(String(raw).trim());
 }
 
-export function describeFilter(filter: DraftFilter): string {
-  const option = operatorOption(filter.operator);
+export function describeFilter(filter: DraftFilter, kind?: FieldKind): string {
+  const option = (kind ? operatorsFor(kind).find((o) => o.operator === filter.operator) : undefined) ?? operatorOption(filter.operator);
   const label = option?.label ?? filter.operator;
   if (!option || option.input === 'none') return label;
   if (option.input === 'list') {
@@ -83,4 +83,8 @@ export function describeFilter(filter: DraftFilter): string {
     return `${label} ${String(range.from)} – ${String(range.to)}`;
   }
   return `${label} ${String(filter.value ?? '')}`;
+}
+
+export function newFilterId(): string {
+  return `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

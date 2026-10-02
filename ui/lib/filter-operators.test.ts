@@ -23,3 +23,19 @@ it('summarises a filter for chips', () => {
   expect(describeFilter({ ...base, operator: 'in', value: ['a', 'b', 'c', 'd'] })).toBe('is any of 4 values');
   expect(describeFilter({ ...base, operator: 'between', value: { from: 1, to: 5 } })).toBe('between 1 – 5');
 });
+
+it('keeps blank numeric input blank instead of coercing it to 0', () => {
+  expect(coerceFilterValue('number', 'single', '  ')).toBe('');
+  expect(coerceFilterValue('number', 'range', { from: ' ', to: '5' })).toEqual({ from: '', to: 5 });
+  expect(coerceFilterValue('number', 'range', { from: '1', to: '' })).toEqual({ from: 1, to: '' });
+  expect(coerceFilterValue('number', 'single', 'abc')).toBeNaN();
+  expect(coerceFilterValue('number', 'list', '1, , 2')).toEqual([1, 2]);
+});
+
+it('uses the field kind to pick the operator label', () => {
+  const base = { id: 'f', column: 'c', aliasPath: '', sliceOnly: false };
+  expect(describeFilter({ ...base, operator: 'eq', value: 42 }, 'number')).toBe('= 42');
+  expect(describeFilter({ ...base, operator: 'neq', value: 42 }, 'number')).toBe('≠ 42');
+  expect(describeFilter({ ...base, operator: 'eq', value: 'x' }, 'text')).toBe('is x');
+  expect(describeFilter({ ...base, operator: 'eq', value: 'x' })).toBe('is x');
+});
