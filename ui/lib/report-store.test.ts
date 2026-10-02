@@ -82,6 +82,15 @@ describe('parseStoredReport', () => {
     expect(parseStoredReport({ schemaVersion: 2 })).toBeNull();
     expect(parseStoredReport('nope')).toBeNull();
   });
+
+  it("keeps a link's data mart only when it is recorded", () => {
+    const link = { reportId: 'r', destinationId: 'd', spreadsheetId: 's', sheetId: 0, syncedDraftHash: 'h' };
+    const parse = (linkedReport: unknown) =>
+      parseStoredReport({ schemaVersion: 1, title: 'T', draft: { mainDataMartId: DM.visitor }, linkedReport })?.linkedReport;
+    expect(parse({ ...link, dataMartId: DM.visitor })).toEqual({ ...link, dataMartId: DM.visitor });
+    expect(parse({ ...link, dataMartId: 7 })).toEqual(link);
+    expect(parse(link)).toEqual(link);
+  });
 });
 
 describe('configHash', () => {

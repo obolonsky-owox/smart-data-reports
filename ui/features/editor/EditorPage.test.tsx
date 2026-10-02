@@ -1,13 +1,22 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { DM, sampleRows } from '../../fixtures/smart-data';
-import { emptyDraft } from '../../lib/report-draft';
-import type { StoredReport } from '../../lib/report-store';
+import { emptyDraft, type ReportDraft } from '../../lib/report-draft';
+import { configHash, type StoredReport } from '../../lib/report-store';
 import { __mock, __resetForTests } from '../../sdk-mock';
 import { mockServices, renderWithServices } from '../../test/render';
 import { EditorPage } from './EditorPage';
 
-beforeEach(() => __resetForTests());
+vi.mock('sonner', async (original) => ({
+  ...(await original<typeof import('sonner')>()),
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
+}));
+
+beforeEach(() => {
+  __resetForTests();
+  vi.clearAllMocks();
+});
 
 async function startVisitorReport() {
   renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
@@ -163,4 +172,71 @@ it('mounts the column panel only in the side sheet on narrow screens', async () 
   } finally {
     narrow.mockRestore();
   }
+});
+
+describe('saving a report linked to Google Sheets', () => {
+  const linkedDraft: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }, { name: 'sessions__source', aliasPath: 'sessions' }] };
+  const link = (draft: ReportDraft, extra: Partial<NonNullable<StoredReport['linkedReport']>> = {}) => ({
+    reportId: 'report-1', destinationId: 'dest-sheets', spreadsheetId: 'sheet-1', sheetId: 0, syncedDraftHash: configHash(draft), ...extra,
+  });
+
+  async function openLinked(report: Partial<StoredReport> = {}) {
+    const stored: StoredReport = {
+      schemaVersion: 1, title: 'Linked', createdBy: 'demo-user', updatedBy: 'demo-user',
+      draft: linkedDraft, linkedReport: link(linkedDraft, { dataMartId: DM.visitor }), ...report,
+    };
+    __mock.seedReport('mine', stored);
+    __mock.state.reports.set('report-1', { id: 'report-1', title: 'Linked', body: {} });
+    renderWithServices(<EditorPage reportId='mine' onBack={vi.fn()} />, await mockServices());
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Client ID (Visitor)' }));
+    return stored;
+  }
+
+  const savedDoc = () => [...reports().values()][0]!;
+  const puts = () => __mock.state.requests.filter((r) => r.method === 'PUT');
+
+  it('keeps the edits when ODM rejects the update', async () => {
+    const stored = await openLinked();
+    __mock.fail('/api/reports/report-1', { code: 'HTTP_ERROR', status: 400, message: 'Bad Request', details: { message: 'Unknown column client_id.' } }, 'PUT');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and update Google Sheets' }));
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith("Saved. Google Sheets wasn't updated: Unknown column client_id."));
+    const doc = savedDoc().document as StoredReport;
+    expect(doc.draft.columns.map((c) => c.name)).toContain('client_id');
+    expect(doc.linkedReport?.syncedDraftHash).toBe(stored.linkedReport!.syncedDraftHash);
+    expect(screen.queryByRole('status', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+  });
+
+  it("keeps the edits and shows ODM's reason when overwriting another member's linked report is refused", async () => {
+    await openLinked({ createdBy: 'someone', updatedBy: 'someone' });
+    __mock.fail('/api/reports/report-1', {
+      code: 'HTTP_ERROR', status: 403, message: 'Forbidden',
+      details: { message: 'You are not an owner of this report.', error: 'Forbidden', statusCode: 403 },
+    }, 'PUT');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and update Google Sheets' }));
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Overwrite' }));
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith("Saved. Google Sheets wasn't updated: You are not an owner of this report."));
+    expect((reports().get('mine')!.document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id');
+  });
+
+  it('unlinks the Google Sheets report instead of updating it when the main data mart changed', async () => {
+    await openLinked();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Report on' }), DM.session);
+    const confirm = await screen.findByRole('alertdialog');
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Remove and continue' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Save and update Google Sheets' }));
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('create a new Google Sheets report for Session')));
+    expect(puts()).toEqual([]);
+    expect(reports().size).toBe(1);
+    expect(savedDoc()).toMatchObject({ parentId: DM.session });
+    expect((savedDoc().document as StoredReport).linkedReport).toBeUndefined();
+  });
+
+  it('saves without updating Google Sheets while the report has problems', async () => {
+    const broken: ReportDraft = { ...linkedDraft, columns: [...linkedDraft.columns, { name: 'gone_field', aliasPath: '' }] };
+    await openLinked({ draft: broken, linkedReport: link(broken, { dataMartId: DM.visitor }) });
+    await userEvent.click(screen.getByRole('button', { name: 'Save and update Google Sheets' }));
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/^Saved\. Google Sheets wasn't updated: /)));
+    expect(puts()).toEqual([]);
+    expect((savedDoc().document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id');
+  });
 });

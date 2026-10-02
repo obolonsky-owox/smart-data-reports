@@ -9,7 +9,18 @@ import { createLinkedReport, updateLinkedReport, type SyncOutcome } from '../../
 export type SaveOutcome =
   | { kind: 'saved' }
   | { kind: 'synced'; runStatus: ReportRunStatus; runError?: string }
-  | { kind: 'link-missing' };
+  | { kind: 'link-missing' }
+  /** The main data mart changed, so the link to the ODM report on the old one was removed. */
+  | { kind: 'link-dropped' }
+  /** The document was saved; the ODM report was not updated, for `message`. */
+  | { kind: 'sync-failed'; message: string };
+
+export interface SyncOptions {
+  /** The draft has validation issues, so it is saved but never pushed to ODM. */
+  hasIssues?: boolean;
+}
+
+export const SYNC_BLOCKED_MESSAGE = 'fix the problems in the column panel first.';
 
 export interface ReportDocument {
   status: 'loading' | 'ready' | 'error';
@@ -22,9 +33,9 @@ export interface ReportDocument {
   setDraft: Dispatch<SetStateAction<ReportDraft | null>>;
   dirty: boolean;
   isAuthor: boolean;
-  saveWithSync(options?: { asCopy?: boolean }): Promise<SaveOutcome>;
+  saveWithSync(options?: { asCopy?: boolean } & SyncOptions): Promise<SaveOutcome>;
   createSheetsReport(input: { title: string; destinationId: string }): Promise<SyncOutcome>;
-  updateSheetsReport(): Promise<SaveOutcome>;
+  updateSheetsReport(options?: SyncOptions): Promise<SaveOutcome>;
 }
 
 interface SaveOptions { asCopy?: boolean; title?: string; linkedReport?: LinkedReport | null }
@@ -99,13 +110,23 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
   );
 
   const syncLinked = useCallback(
-    async (linked: LinkedReport): Promise<SaveOutcome> => {
-      const result = await updateLinkedReport(
-        api,
-        linked,
-        { title: titleRef.current, draft: draftRef.current! },
-        { intervalMs: pollIntervalMs },
-      );
+    async (linked: LinkedReport, { hasIssues = false }: SyncOptions): Promise<SaveOutcome> => {
+      const current = draftRef.current!;
+      // ODM checks a report's columns against the data mart it was created on, and an update
+      // can't move it, so a report on another main data mart can't stay linked.
+      if (linked.dataMartId !== undefined && linked.dataMartId !== current.mainDataMartId) {
+        await save({ linkedReport: null });
+        return { kind: 'link-dropped' };
+      }
+      // Save first, so a failed update never loses the edits; the link keeps its old hash.
+      await save();
+      if (hasIssues) return { kind: 'sync-failed', message: SYNC_BLOCKED_MESSAGE };
+      let result: Awaited<ReturnType<typeof updateLinkedReport>>;
+      try {
+        result = await updateLinkedReport(api, linked, { title: titleRef.current, draft: current }, { intervalMs: pollIntervalMs });
+      } catch (error) {
+        return { kind: 'sync-failed', message: describeError(error, 'this Google Sheets report').message };
+      }
       if ('missing' in result) {
         await save({ linkedReport: null });
         return { kind: 'link-missing' };
@@ -117,20 +138,23 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
   );
 
   const saveWithSync = useCallback(
-    async ({ asCopy = false }: { asCopy?: boolean } = {}): Promise<SaveOutcome> => {
+    async ({ asCopy = false, ...sync }: { asCopy?: boolean } & SyncOptions = {}): Promise<SaveOutcome> => {
       const linked = asCopy ? undefined : savedRef.current.report?.linkedReport;
-      if (linked && draftRef.current && linked.syncedDraftHash !== configHash(draftRef.current)) return syncLinked(linked);
+      if (linked && draftRef.current && linked.syncedDraftHash !== configHash(draftRef.current)) return syncLinked(linked, sync);
       await save(asCopy ? { asCopy, title: `${titleRef.current} (copy)`, linkedReport: null } : {});
       return { kind: 'saved' };
     },
     [save, syncLinked],
   );
 
-  const updateSheetsReport = useCallback(async (): Promise<SaveOutcome> => {
-    const linked = savedRef.current.report?.linkedReport;
-    if (!linked) throw new Error('This report has no Google Sheets report yet.');
-    return syncLinked(linked);
-  }, [syncLinked]);
+  const updateSheetsReport = useCallback(
+    async (options: SyncOptions = {}): Promise<SaveOutcome> => {
+      const linked = savedRef.current.report?.linkedReport;
+      if (!linked) throw new Error('This report has no Google Sheets report yet.');
+      return syncLinked(linked, options);
+    },
+    [syncLinked],
+  );
 
   const createSheetsReport = useCallback(
     async ({ title: reportTitle, destinationId }: { title: string; destinationId: string }): Promise<SyncOutcome> => {

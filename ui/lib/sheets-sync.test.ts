@@ -23,7 +23,7 @@ it('creates a spreadsheet, a report with the read plan, and runs it', async () =
   const { api, calls } = fakeApi();
   const outcome = await createLinkedReport(api, { title: 'Visitors', destinationId: 'dest-1', draft });
   expect(outcome).toEqual({
-    linked: { reportId: 'report-1', destinationId: 'dest-1', spreadsheetId: 'sheet-1', sheetId: 7, syncedDraftHash: configHash(draft) },
+    linked: { reportId: 'report-1', destinationId: 'dest-1', spreadsheetId: 'sheet-1', sheetId: 7, syncedDraftHash: configHash(draft), dataMartId: DM.visitor },
     runStatus: 'SUCCESS',
     runError: undefined,
   });

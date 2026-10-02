@@ -153,15 +153,29 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   }
 
   function report(outcome: SaveOutcome) {
-    if (outcome.kind === 'link-missing') toast.warning('The Google Sheets report was deleted in ODM. Create a new one to keep a spreadsheet in sync.');
-    else if (outcome.kind === 'synced' && outcome.runStatus !== 'SUCCESS') toast.error(`Saved, but the Google Sheets run failed${outcome.runError ? `: ${outcome.runError}` : '.'}`);
-    else toast.success(outcome.kind === 'synced' ? 'Saved and updated Google Sheets.' : 'Report saved.');
+    switch (outcome.kind) {
+      case 'link-missing':
+        toast.warning('The Google Sheets report was deleted in ODM. Create a new one to keep a spreadsheet in sync.');
+        break;
+      case 'link-dropped':
+        toast.warning(`Saved. The Google Sheets report reads the previous data mart, so it's no longer linked. You can create a new Google Sheets report for ${mainMart?.title ?? 'this data mart'}.`);
+        break;
+      case 'sync-failed':
+        toast.warning(`Saved. Google Sheets wasn't updated: ${outcome.message}`);
+        break;
+      case 'synced':
+        if (outcome.runStatus === 'SUCCESS') toast.success('Saved and updated Google Sheets.');
+        else toast.error(`Saved, but the Google Sheets run failed${outcome.runError ? `: ${outcome.runError}` : '.'}`);
+        break;
+      default:
+        toast.success('Report saved.');
+    }
   }
 
   async function save(asCopy = false): Promise<boolean> {
     setSaving(true);
     try {
-      report(await doc.saveWithSync({ asCopy }));
+      report(await doc.saveWithSync({ asCopy, hasIssues: issues.length > 0 }));
       return true;
     } catch (error) {
       toast.error(describeError(error).message);
@@ -520,7 +534,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
           defaultTitle={doc.title}
           dataMartId={draft.mainDataMartId}
           onCreate={(input) => doc.createSheetsReport(input)}
-          onUpdate={() => doc.updateSheetsReport()}
+          onUpdate={() => doc.updateSheetsReport({ hasIssues: issues.length > 0 })}
           onClose={() => setSheets(null)}
         />
       )}

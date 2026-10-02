@@ -38,3 +38,19 @@ it('updates the linked report and handles a report deleted in ODM', async () => 
   await userEvent.click(screen.getByRole('button', { name: 'Create a new one' }));
   expect(await screen.findByRole('button', { name: 'Create report' })).toBeInTheDocument();
 });
+
+it('says the report was saved when the Google Sheets update failed', async () => {
+  const onUpdate = vi.fn(async () => ({ kind: 'sync-failed' as const, message: 'You are not an owner of this report.' }));
+  renderWithServices(<SheetsReportDialog mode='update' defaultTitle='T' dataMartId={DM.visitor} onCreate={vi.fn()} onUpdate={onUpdate} onClose={vi.fn()} />, await mockServices());
+  await userEvent.click(screen.getByRole('button', { name: 'Update report' }));
+  expect(await screen.findByText("Saved. Google Sheets wasn't updated: You are not an owner of this report.")).toBeInTheDocument();
+});
+
+it('offers a new Google Sheets report when the main data mart changed', async () => {
+  const onUpdate = vi.fn(async () => ({ kind: 'link-dropped' as const }));
+  renderWithServices(<SheetsReportDialog mode='update' defaultTitle='T' dataMartId={DM.session} onCreate={vi.fn()} onUpdate={onUpdate} onClose={vi.fn()} />, await mockServices());
+  await userEvent.click(screen.getByRole('button', { name: 'Update report' }));
+  expect(await screen.findByText(/reads the previous data mart, so it's no longer linked/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Create a new one' }));
+  expect(await screen.findByRole('button', { name: 'Create report' })).toBeInTheDocument();
+});

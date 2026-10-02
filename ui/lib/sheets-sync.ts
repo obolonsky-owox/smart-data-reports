@@ -31,6 +31,7 @@ export async function createLinkedReport(
       spreadsheetId: sheet.spreadsheetId,
       sheetId: sheet.sheetId,
       syncedDraftHash: configHash(input.draft),
+      dataMartId: input.draft.mainDataMartId,
     },
     runStatus: run.status,
     runError: run.error,

@@ -9,6 +9,8 @@ export interface LinkedReport {
   sheetId: number;
   /** configHash of the draft the ODM report was last updated with. */
   syncedDraftHash: string;
+  /** The data mart the ODM report reads; absent on links created before it was recorded. */
+  dataMartId?: string;
 }
 
 export interface StoredReport {
@@ -88,6 +90,12 @@ function isLinkedReport(value: unknown): value is LinkedReport {
   );
 }
 
+function parseLinkedReport(value: unknown): LinkedReport | undefined {
+  if (!isLinkedReport(value)) return undefined;
+  const { reportId, destinationId, spreadsheetId, sheetId, syncedDraftHash, dataMartId } = value;
+  return { reportId, destinationId, spreadsheetId, sheetId, syncedDraftHash, ...(typeof dataMartId === 'string' ? { dataMartId } : {}) };
+}
+
 export function parseStoredReport(value: unknown): StoredReport | null {
   if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.title !== 'string') return null;
   const draft = value.draft;
@@ -97,7 +105,7 @@ export function parseStoredReport(value: unknown): StoredReport | null {
     title: value.title,
     createdBy: typeof value.createdBy === 'string' ? value.createdBy : '',
     updatedBy: typeof value.updatedBy === 'string' ? value.updatedBy : '',
-    linkedReport: isLinkedReport(value.linkedReport) ? value.linkedReport : undefined,
+    linkedReport: parseLinkedReport(value.linkedReport),
     draft: {
       mainDataMartId: draft.mainDataMartId,
       includedPaths: asArray(draft.includedPaths),

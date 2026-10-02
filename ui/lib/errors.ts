@@ -37,6 +37,9 @@ function backendMessage(details: unknown): string | undefined {
   return undefined;
 }
 
+/** Framework defaults that say nothing beyond the status code. */
+const GENERIC_FORBIDDEN = /^(forbidden( resource)?|access denied)\.?$/i;
+
 export function errorStatus(error: unknown): number | undefined {
   const status = transportPayload(error)?.status ?? (error as { status?: unknown } | null)?.status;
   return typeof status === 'number' ? status : undefined;
@@ -57,7 +60,12 @@ export function describeError(error: unknown, subject = 'this data'): UserFacing
   const raw = backendMessage(payload?.details) ?? payload?.message ?? (error instanceof Error ? error.message : String(error));
 
   if (code === 'SUSPENDED') return { message: 'This plugin was suspended by an administrator.', retryable: false, code, status };
-  if (code === 'FORBIDDEN' || status === 403) return { message: `You don't have access to ${subject}.`, retryable: false, code, status };
+  if (code === 'FORBIDDEN' || status === 403) {
+    // ODM explains some refusals, e.g. that only report owners may change a report.
+    const reason = backendMessage(payload?.details)?.trim();
+    const message = reason && !GENERIC_FORBIDDEN.test(reason) ? reason : `You don't have access to ${subject}.`;
+    return { message, retryable: false, code, status };
+  }
   if (code === 'NETWORK_ERROR' || code === 'TIMEOUT') return { message: "Couldn't reach OWOX Data Marts.", retryable: true, code, status };
   if (status === 404) return { message: 'Not found. It may have been deleted.', retryable: false, code, status };
   if (status !== undefined && status >= 400 && status < 500) return { message: raw, retryable: false, code, status };

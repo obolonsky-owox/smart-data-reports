@@ -10,6 +10,16 @@ it('explains missing access', () => {
   expect(describeError(transportError({ code: 'FORBIDDEN', message: 'Refused' })).retryable).toBe(false);
 });
 
+it("shows ODM's own reason for a refusal, but not a generic one", () => {
+  const owner = transportError({
+    code: 'HTTP_ERROR', status: 403, message: 'Forbidden',
+    details: { message: 'You are not an owner of this report.', error: 'Forbidden', statusCode: 403 },
+  });
+  expect(describeError(owner, 'this report')).toMatchObject({ message: 'You are not an owner of this report.', retryable: false });
+  const generic = transportError({ code: 'HTTP_ERROR', status: 403, message: 'Forbidden', details: { message: 'Forbidden resource' } });
+  expect(describeError(generic, 'Session').message).toBe("You don't have access to Session.");
+});
+
 it('shows ODM validation messages as they are', () => {
   const error = transportError({
     code: 'HTTP_ERROR', status: 400, message: 'Bad Request',

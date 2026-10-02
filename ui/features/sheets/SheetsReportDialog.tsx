@@ -24,8 +24,11 @@ type Step =
   | { kind: 'form' }
   | { kind: 'working' }
   | { kind: 'done'; linked?: LinkedReport; runStatus: string; runError?: string }
-  | { kind: 'missing' }
+  | { kind: 'missing'; message: string }
   | { kind: 'error'; message: string };
+
+const DELETED_MESSAGE = 'The Google Sheets report was deleted in ODM. Create a new one to keep a spreadsheet in sync.';
+const DROPPED_MESSAGE = "This Google Sheets report reads the previous data mart, so it's no longer linked. Create a new one for this data mart.";
 
 export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId, onCreate, onUpdate, onClose }: SheetsReportDialogProps) {
   const { api, projectId, openExternal, navigate } = useServices();
@@ -65,7 +68,9 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
     setStep({ kind: 'working' });
     try {
       const outcome = await onUpdate();
-      if (outcome.kind === 'link-missing') setStep({ kind: 'missing' });
+      if (outcome.kind === 'link-missing') setStep({ kind: 'missing', message: DELETED_MESSAGE });
+      else if (outcome.kind === 'link-dropped') setStep({ kind: 'missing', message: DROPPED_MESSAGE });
+      else if (outcome.kind === 'sync-failed') setStep({ kind: 'error', message: `Saved. Google Sheets wasn't updated: ${outcome.message}` });
       else if (outcome.kind === 'synced') setStep({ kind: 'done', runStatus: outcome.runStatus, runError: outcome.runError });
       else setStep({ kind: 'done', runStatus: 'SUCCESS' });
     } catch (error) {
@@ -157,7 +162,7 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
 
         {step.kind === 'missing' && (
           <div className='flex flex-col gap-2 text-sm'>
-            <p>The Google Sheets report was deleted in ODM. Create a new one to keep a spreadsheet in sync.</p>
+            <p>{step.message}</p>
             <Button
               variant='outline'
               className='w-fit'

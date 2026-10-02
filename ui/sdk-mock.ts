@@ -6,7 +6,7 @@ import type { CollectionDoc, StoredReport } from './lib/report-store';
 // Stand-in for @owox/plugin-sdk in `vite dev` and Vitest. It serves the fixture model in
 // ui/fixtures and keeps reports and collections in memory.
 
-type Payload = { code: string; status?: number; message: string };
+type Payload = { code: string; status?: number; message: string; details?: unknown };
 
 export class MockTransportError extends Error {
   constructor(readonly payload: Payload) {
@@ -25,7 +25,8 @@ function freshState() {
     opened: [] as string[],
     rows: (columns: string[]): Row[] => sampleRows(columns, 120),
     lastRows: [] as Row[],
-    failures: new Map<string, Payload>(),
+    /** Keyed by path prefix; `method` limits a failure to one HTTP method. */
+    failures: new Map<string, { payload: Payload; method?: string }>(),
     collections: new Map<string, Map<string, CollectionDoc<unknown>>>(),
     reports: new Map<string, ReportSummary & { body: unknown }>(),
     destinations: [{ id: 'dest-sheets', title: 'Marketing Google Sheets' }],
@@ -42,9 +43,9 @@ function tick(): string {
   return new Date(Date.UTC(2026, 9, 2, 12, 0, state.clock)).toISOString();
 }
 
-function maybeFail(key: string) {
-  for (const [prefix, payload] of state.failures) {
-    if (key.startsWith(prefix)) throw new MockTransportError(payload);
+function maybeFail(key: string, method?: string) {
+  for (const [prefix, failure] of state.failures) {
+    if (key.startsWith(prefix) && (!failure.method || failure.method === method)) throw new MockTransportError(failure.payload);
   }
 }
 
@@ -82,7 +83,7 @@ function totalsOf(rows: Row[]) {
 const owox = {
   dataMarts: {
     async list() {
-      maybeFail('/api/data-marts');
+      maybeFail('/api/data-marts', 'GET');
       return DATA_MARTS;
     },
     async traverseData(
@@ -91,7 +92,7 @@ const owox = {
     ) {
       const path = `/api/external/http-data/data-marts/${id}.ndjson`;
       state.requests.push({ method: 'GET', path, body: options });
-      maybeFail(path);
+      maybeFail(path, 'GET');
       tick();
       let rows = state.rows(options.column ?? []);
       for (const rule of options.aggregation ?? []) {
@@ -108,7 +109,7 @@ const owox = {
 
   async getJson<T>(path: string): Promise<T> {
     state.requests.push({ method: 'GET', path });
-    maybeFail(path);
+    maybeFail(path, 'GET');
     const id = (re: RegExp) => decodeURIComponent(path.match(re)?.[1] ?? '');
     if (/\/blendable-schema$/.test(path)) {
       const schema = SCHEMAS[id(/^\/api\/data-marts\/([^/]+)\//)];
@@ -139,7 +140,7 @@ const owox = {
 
   async postJson<T>(path: string, body: unknown): Promise<T> {
     state.requests.push({ method: 'POST', path, body });
-    maybeFail(path);
+    maybeFail(path, 'POST');
     if (/\/google-sheets\/documents$/.test(path)) {
       state.counter += 1;
       return { spreadsheetId: `sheet-${state.counter}`, sheetId: 0 } as T;
@@ -163,7 +164,7 @@ const owox = {
 
   async putJson<T>(path: string, body: unknown): Promise<T> {
     state.requests.push({ method: 'PUT', path, body });
-    maybeFail(path);
+    maybeFail(path, 'PUT');
     const match = path.match(/^\/api\/reports\/([^/]+)$/);
     const report = match ? state.reports.get(decodeURIComponent(match[1]!)) : undefined;
     if (!report) throw notFound();
@@ -239,8 +240,8 @@ export const __mock = {
     return state;
   },
   MockTransportError,
-  fail(prefix: string, payload: Payload) {
-    state.failures.set(prefix, payload);
+  fail(prefix: string, payload: Payload, method?: 'GET' | 'POST' | 'PUT') {
+    state.failures.set(prefix, { payload, method });
   },
   clearFailures() {
     state.failures.clear();
