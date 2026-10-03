@@ -146,29 +146,23 @@ export function SelectedTab(props: SelectedTabProps) {
           }
         >
           {draft.dateRanges.length === 0 && <p className='px-3 text-xs text-muted-foreground'>No periods. The report reads all time.</p>}
-          {draft.dateRanges.map((range) => {
-            const field = index.fields.get(range.column);
-            return (
-              <div key={range.column} className='flex items-start gap-2 px-3 py-1'>
-                <div className='flex min-w-0 flex-1 flex-col gap-1'>
-                  <div className='flex min-w-0 items-center justify-between gap-2 text-sm'>
-                    <span className='flex min-w-0 items-center gap-1'>
-                      <span className='min-w-0 truncate'>{fieldLabel(range.column)}</span>
-                      {field && <FieldType field={field} />}
-                    </span>
-                    <span className='flex min-w-0 items-center gap-1'>
-                      {martOf(range.aliasPath)}
-                      <PlacementMarker placement={dateRangePlacement(range.aliasPath)} kind='period' mainLabel={main.title} instanceLabel={martLabel(range.aliasPath)} />
-                    </span>
-                  </div>
-                  <DateRangeEditor value={range.range} label={fieldLabel(range.column)} onChange={(value) => props.onSetDateRange(range.column, value)} />
+          {draft.dateRanges.map((range) => (
+            <div key={range.column} className='flex items-start gap-2 px-3 py-1'>
+              <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                <div className='flex min-w-0 items-center justify-between gap-2 text-sm'>
+                  <span className='min-w-0 truncate'>{fieldLabel(range.column)}</span>
+                  <span className='flex min-w-0 items-center gap-1'>
+                    {martOf(range.aliasPath)}
+                    <PlacementMarker placement={dateRangePlacement(range.aliasPath)} kind='period' mainLabel={main.title} instanceLabel={martLabel(range.aliasPath)} />
+                  </span>
                 </div>
-                <Button variant='ghost' size='icon' className='size-7 shrink-0' aria-label={`Remove date range ${fieldLabel(range.column)}`} onClick={() => props.onRemoveDateRange(range.column)}>
-                  <X className='h-4 w-4' />
-                </Button>
+                <DateRangeEditor value={range.range} label={fieldLabel(range.column)} onChange={(value) => props.onSetDateRange(range.column, value)} />
               </div>
-            );
-          })}
+              <Button variant='ghost' size='icon' className='size-7 shrink-0' aria-label={`Remove date range ${fieldLabel(range.column)}`} onClick={() => props.onRemoveDateRange(range.column)}>
+                <X className='h-4 w-4' />
+              </Button>
+            </div>
+          ))}
         </Subsection>
 
         <Subsection

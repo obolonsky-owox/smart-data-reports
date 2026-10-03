@@ -142,7 +142,8 @@ it('shows each column with its data type, like the field picker', () => {
   expect(within(columns).getByText('(STRING)')).toBeInTheDocument();
   expect(within(columns).getByText('(BOOLEAN)')).toBeInTheDocument();
   expect(within(columns).queryByText('ABC')).not.toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Date ranges' })).getAllByText('(DATE)')).not.toHaveLength(0);
+  // A period is always on a date, so Filters & Slices leaves the type out.
+  expect(within(screen.getByRole('region', { name: 'Filters & Slices' })).queryByText('(DATE)')).not.toBeInTheDocument();
 });
 
 it('lists aggregations and date buckets, and edits or removes them', async () => {
