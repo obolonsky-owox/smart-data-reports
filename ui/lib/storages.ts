@@ -43,11 +43,22 @@ export interface StorageMembership {
   martIdsByStorage: Record<string, string[]>;
 }
 
-/** Loads every storage and the ids of the data marts it holds. */
+/**
+ * Loads every storage and the ids of the data marts it holds. A storage whose data marts can't be
+ * loaded (e.g. one the member can't see) is dropped; its reportable data marts end up unassigned.
+ */
 export async function loadStorageMembership(
   api: Pick<OdmApi, 'listStorages' | 'listStorageMartIds'>,
 ): Promise<StorageMembership> {
-  const storages = await api.listStorages();
-  const ids = await Promise.all(storages.map((s) => api.listStorageMartIds(s.id)));
-  return { storages, martIdsByStorage: Object.fromEntries(storages.map((s, i) => [s.id, ids[i]!])) };
+  const all = await api.listStorages();
+  const results = await Promise.allSettled(all.map((s) => api.listStorageMartIds(s.id)));
+  const storages: StorageSummary[] = [];
+  const martIdsByStorage: Record<string, string[]> = {};
+  all.forEach((storage, i) => {
+    const result = results[i]!;
+    if (result.status === 'rejected') return;
+    storages.push(storage);
+    martIdsByStorage[storage.id] = result.value;
+  });
+  return { storages, martIdsByStorage };
 }

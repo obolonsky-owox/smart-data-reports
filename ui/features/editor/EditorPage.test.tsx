@@ -138,6 +138,8 @@ describe('storages', () => {
   it('filters the start screen by storage and searches the data marts', async () => {
     renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
     const storage = await screen.findByRole('combobox', { name: 'Storage' });
+    expect(screen.getByText('Storage', { selector: 'label' })).toBeVisible();
+    expect(screen.getByText('Data mart', { selector: 'span' })).toBeVisible();
     expect(within(storage).getAllByRole('option').map((o) => o.textContent)).toEqual(['Marketing BigQuery', 'Finance Snowflake']);
     expect(storage).toHaveValue(STORAGE.bigquery);
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { Input } from '@owox/ui/components/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@owox/ui/components/popover';
@@ -41,9 +41,8 @@ export function DataMartPicker({ label, marts, value, onChange, className }: Dat
     if (dataMartId !== value) onChange(dataMartId);
   }
 
-  useEffect(() => {
-    if (open && activeIndex >= 0) document.getElementById(`${listId}-option-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
-  }, [open, activeIndex, listId]);
+  // Runs whenever another option becomes active, including when the portaled list first mounts.
+  const scrollIntoView = useCallback((option: HTMLDivElement | null) => option?.scrollIntoView({ block: 'nearest' }), []);
 
   function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -58,7 +57,8 @@ export function DataMartPicker({ label, marts, value, onChange, className }: Dat
   }
 
   return (
-    <Popover open={open} onOpenChange={changeOpen}>
+    // Modal, so a Sheet's scroll lock doesn't swallow wheel scrolling of the portaled list.
+    <Popover modal open={open} onOpenChange={changeOpen}>
       <PopoverTrigger asChild>
         <button
           type='button'
@@ -117,6 +117,7 @@ export function DataMartPicker({ label, marts, value, onChange, className }: Dat
             <div
               key={mart.id}
               id={optionId(i)}
+              ref={i === activeIndex ? scrollIntoView : undefined}
               role='option'
               aria-selected={mart.id === value}
               data-highlighted={i === activeIndex ? '' : undefined}

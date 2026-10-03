@@ -321,23 +321,31 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const startMarts = startGroup?.marts ?? marts ?? [];
   const startMartId = startMarts.some((m) => m.id === startId) ? startId : (startMarts[0]?.id ?? '');
   const startPicker = (action: string, variant: 'default' | 'outline') => (
-    <div className='flex w-full max-w-sm flex-col gap-2 text-left'>
+    <div className='flex w-full max-w-sm flex-col gap-1 text-left'>
       {catalog && startGroup && (
-        <NativeSelect
-          aria-label='Storage'
-          value={startGroup.storage.id}
-          onChange={(e) => {
-            setStartStorageId(e.target.value);
-            setStartId('');
-          }}
-        >
-          {catalog.groups.map((g) => (
-            <option key={g.storage.id} value={g.storage.id}>
-              {g.storage.title}
-            </option>
-          ))}
-        </NativeSelect>
+        <>
+          <label htmlFor='start-storage' className='text-xs text-muted-foreground'>
+            Storage
+          </label>
+          <NativeSelect
+            id='start-storage'
+            aria-label='Storage'
+            className='mb-2'
+            value={startGroup.storage.id}
+            onChange={(e) => {
+              setStartStorageId(e.target.value);
+              setStartId('');
+            }}
+          >
+            {catalog.groups.map((g) => (
+              <option key={g.storage.id} value={g.storage.id}>
+                {g.storage.title}
+              </option>
+            ))}
+          </NativeSelect>
+        </>
       )}
+      <span className='text-xs text-muted-foreground'>Data mart</span>
       <div className='flex min-w-0 items-center gap-2'>
         <DataMartPicker label='Data mart' marts={startMarts} value={startMartId} onChange={setStartId} />
         <Button variant={variant} disabled={!startMartId} onClick={() => doc.setDraft(emptyDraft(startMartId))}>

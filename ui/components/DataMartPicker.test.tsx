@@ -72,3 +72,16 @@ it('opens from the keyboard with ArrowDown', async () => {
   await userEvent.keyboard('{ArrowDown}');
   expect(screen.getByRole('listbox', { name: 'Data mart' })).toBeInTheDocument();
 });
+
+it('scrolls the current data mart into view when the list opens', async () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+  try {
+    const { trigger } = setup(DM.user);
+    await userEvent.click(trigger);
+    const option = screen.getByRole('option', { name: 'User' });
+    expect(scroll.mock.contexts).toContain(option);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+  } finally {
+    scroll.mockRestore();
+  }
+});

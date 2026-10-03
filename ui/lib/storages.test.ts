@@ -1,5 +1,5 @@
 import type { DataMartSummary, StorageSummary } from './odm-types';
-import { groupByStorage } from './storages';
+import { groupByStorage, loadStorageMembership } from './storages';
 
 const mart = (id: string, extra: Partial<DataMartSummary> = {}): DataMartSummary => ({
   id, title: id.toUpperCase(), description: null, status: 'PUBLISHED', availableForReporting: true, storage: { type: 'GOOGLE_BIGQUERY' }, ...extra,
@@ -46,4 +46,24 @@ it('lists reportable data marts that no storage claims', () => {
   const catalog = groupByStorage(storages, { 's-bq': ['a'] }, marts);
   expect(catalog.unassigned.map((m) => m.id)).toEqual(['b', 'c']);
   expect(groupByStorage(storages, martIds, marts).unassigned).toEqual([]);
+});
+
+it('drops only the storages whose data marts failed to load', async () => {
+  const membership = await loadStorageMembership({
+    listStorages: async () => storages,
+    listStorageMartIds: async (id: string) => {
+      if (id === 's-sf') throw new Error('Forbidden');
+      return martIds[id as keyof typeof martIds];
+    },
+  });
+  expect(membership.storages.map((s) => s.id)).toEqual(['s-bq', 's-empty']);
+  const catalog = groupByStorage(membership.storages, membership.martIdsByStorage, marts);
+  expect(catalog.groups.map((g) => g.storage.id)).toEqual(['s-bq']);
+  // Its reportable data mart has no storage now, so the editor falls back to the flat list.
+  expect(catalog.unassigned.map((m) => m.id)).toEqual(['c']);
+});
+
+it('fails when the storages themselves cannot be listed', async () => {
+  const api = { listStorages: async () => Promise.reject(new Error('boom')), listStorageMartIds: async () => [] };
+  await expect(loadStorageMembership(api)).rejects.toThrow('boom');
 });
