@@ -7,12 +7,12 @@ import { DataMartPicker } from '../../components/DataMartPicker';
 import { NativeSelect } from '../../components/NativeSelect';
 import type { RelationshipGraph, StorageSummary } from '../../lib/odm-types';
 import type { SchemaIndex } from '../../lib/schema-index';
-import { AllFieldsTab, type AllFieldsTabProps } from './AllFieldsTab';
+import { AllFieldsTab, type AllFieldsTabProps, type FocusRequest } from './AllFieldsTab';
 import { SelectedTab, type SelectedTabProps } from './SelectedTab';
 
 export interface ColumnPanelProps
   extends Omit<AllFieldsTabProps, 'index' | 'graph'>,
-    Omit<SelectedTabProps, 'index' | 'pendingFilterField'> {
+    Omit<SelectedTabProps, 'index' | 'graph' | 'pendingFilterField'> {
   /**
    * The main data mart's schema; both are null while it loads. The panel stays mounted meanwhile, so the
    * "Report on" choice keeps its focus, and only the field list shows a placeholder.
@@ -21,6 +21,8 @@ export interface ColumnPanelProps
   graph: RelationshipGraph | null;
   /** A request to open the filter editor for a field; `nonce` lets the same field be requested twice. */
   filterRequest: { field: string; nonce: number } | null;
+  /** A request to reveal a join path's data mart in All; `nonce` lets the same path be requested twice. */
+  focusRequest?: FocusRequest | null;
   /** Storages with reportable data marts; null when they couldn't be loaded, which hides the storage dropdown. */
   storages: StorageSummary[] | null;
   /** The main data mart's storage. */
@@ -35,7 +37,7 @@ export interface ColumnPanelProps
 }
 
 export function ColumnPanel(props: ColumnPanelProps) {
-  const { index, graph, draft, marts, filterRequest } = props;
+  const { index, graph, draft, marts, filterRequest, focusRequest } = props;
   const [tab, setTab] = useState(filterRequest ? 'selected' : 'all');
   const [pendingFilterField, setPendingFilterField] = useState<string | null>(filterRequest?.field ?? null);
   // The panel outlives a main data mart change, but a pending filter belongs to the previous one.
@@ -52,6 +54,10 @@ export function ColumnPanel(props: ColumnPanelProps) {
     setTab('selected');
     setPendingFilterField(filterRequest.field);
   }, [filterRequest]);
+
+  useEffect(() => {
+    if (focusRequest) setTab('all');
+  }, [focusRequest]);
 
   return (
     <div className='flex h-full min-h-0 w-full min-w-0 flex-col bg-background' data-testid='columnPanel'>
@@ -82,12 +88,13 @@ export function ColumnPanel(props: ColumnPanelProps) {
             <TabsTrigger value='selected'>Selected ({draft.columns.length})</TabsTrigger>
           </TabsList>
           <TabsContent value='all' className='min-h-0 min-w-0 flex-1 overflow-y-auto'>
-            <AllFieldsTab {...props} index={index} graph={graph} />
+            <AllFieldsTab {...props} index={index} graph={graph} focusRequest={focusRequest} />
           </TabsContent>
           <TabsContent value='selected' className='min-h-0 min-w-0 flex-1 overflow-y-auto'>
             <SelectedTab
               {...props}
               index={index}
+              graph={graph}
               pendingFilterField={pendingField}
               onPendingFilterDone={() => {
                 setPendingFilterField(null);

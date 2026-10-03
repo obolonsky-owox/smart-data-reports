@@ -1,5 +1,5 @@
 import type { AggregateFunction, DateTruncUnit } from './odm-types';
-import type { FieldInfo } from './schema-index';
+import { fieldKind, type FieldInfo } from './schema-index';
 
 /** ODM's own names for aggregate functions, shared by the column picker and the table header. */
 export const FN_LABEL: Record<AggregateFunction, string> = {
@@ -20,8 +20,10 @@ export const TRUNC_OPTIONS: { unit: DateTruncUnit | 'FULL'; label: string }[] = 
 /** The functions ODM allows for a field, or a sensible default by field kind when it names none. */
 export function aggregationsFor(field: FieldInfo): AggregateFunction[] {
   if (field.allowedAggregations?.length) return field.allowedAggregations;
-  if (field.kind === 'number') return ['SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNT_DISTINCT'];
-  if (field.kind === 'date') return ['MIN', 'MAX', 'COUNT_DISTINCT'];
-  if (field.kind === 'text') return ['COUNT', 'COUNT_DISTINCT'];
+  // Aggregation runs after the join, on the joined value.
+  const kind = field.joinedType ? fieldKind(field.joinedType) : field.kind;
+  if (kind === 'number') return ['SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNT_DISTINCT'];
+  if (kind === 'date') return ['MIN', 'MAX', 'COUNT_DISTINCT'];
+  if (kind === 'text') return ['COUNT', 'COUNT_DISTINCT'];
   return [];
 }

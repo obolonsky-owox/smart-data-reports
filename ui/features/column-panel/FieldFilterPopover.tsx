@@ -3,10 +3,10 @@ import { Filter, Layers, X } from 'lucide-react';
 import { Button } from '@owox/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@owox/ui/components/popover';
 import { cn } from '@owox/ui/lib/utils';
-import { describeFilter, isFilterValueMissing, newFilterId } from '../../lib/filter-operators';
+import { describeFilter, filterKind, isFilterValueMissing, newFilterId } from '../../lib/filter-operators';
 import type { DraftFilter } from '../../lib/report-draft';
 import type { FieldInfo } from '../../lib/schema-index';
-import { FilterValueFields, ruleFromInput, ruleInputFor } from './FilterEditor';
+import { FilterValueFields, ruleFromInput, ruleInputFor, ruleInputForKind } from './FilterEditor';
 
 type Tab = 'filter' | 'slice';
 
@@ -60,14 +60,15 @@ export function FieldFilterPopover({ field, filters, martLabel, mainTitle, onUps
 function FilterPopoverBody({ field, filters, martLabel, mainTitle, onUpsertFilter, onRemoveFilter, onClose }: FieldFilterPopoverProps & { onClose(): void }) {
   const joined = field.aliasPath !== '';
   const [tab, setTab] = useState<Tab>(() => (joined && filters.length > 0 && filters.every((f) => f.sliceOnly) ? 'slice' : 'filter'));
-  const [input, setInput] = useState(() => ruleInputFor(field));
-  const [missing, setMissing] = useState(false);
   const sliceOnly = joined && tab === 'slice';
+  const kind = filterKind(field, sliceOnly);
+  const [input, setInput] = useState(() => ruleInputFor(kind));
+  const [missing, setMissing] = useState(false);
   const listed = joined ? filters.filter((f) => f.sliceOnly === sliceOnly) : filters;
   const noun = sliceOnly ? 'slice' : 'filter';
 
   function apply() {
-    const rule = ruleFromInput(field, input);
+    const rule = ruleFromInput(kind, input);
     if (!rule || isFilterValueMissing(rule.option.input, rule.value)) {
       setMissing(true);
       return;
@@ -96,6 +97,7 @@ function FilterPopoverBody({ field, filters, martLabel, mainTitle, onUpsertFilte
               )}
               onClick={() => {
                 setTab(t);
+                setInput((current) => ruleInputForKind(filterKind(field, t === 'slice'), current));
                 setMissing(false);
               }}
             >
@@ -119,7 +121,7 @@ function FilterPopoverBody({ field, filters, martLabel, mainTitle, onUpsertFilte
         <div className='space-y-1'>
           <div className='text-sm leading-none font-medium'>{sliceOnly ? 'Active slices' : 'Active filters'}</div>
           {listed.map((f) => {
-            const summary = describeFilter(f, field.kind);
+            const summary = describeFilter(f, filterKind(field, f.sliceOnly));
             return (
               <div key={f.id} className='flex items-center gap-2 rounded bg-muted/40 px-2 py-1 text-xs'>
                 <span className='flex-1 truncate font-mono' title={summary}>
@@ -136,7 +138,7 @@ function FilterPopoverBody({ field, filters, martLabel, mainTitle, onUpsertFilte
 
       <div className='flex flex-col gap-2'>
         <FilterValueFields
-          field={field}
+          kind={kind}
           input={input}
           onChange={(next) => {
             setInput(next);

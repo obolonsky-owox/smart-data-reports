@@ -32,6 +32,21 @@ describe('buildSchemaIndex', () => {
     ]);
   });
 
+  it("types a joined field by its own type and keeps the joined type ODM reports", () => {
+    expect(index.fields.get('contact__is_mql')).toMatchObject({ type: 'BOOLEAN', kind: 'boolean', joinedType: 'STRING' });
+    expect(index.fields.get('contact__name')).not.toHaveProperty('joinedType');
+  });
+
+  it('falls back to the joined type when the host sends no source type', () => {
+    const schema = {
+      ...VISITOR_SCHEMA,
+      blendedFields: VISITOR_SCHEMA.blendedFields.map((f) => ({ ...f, sourceFieldType: '' })),
+    };
+    const field = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, schema).fields.get('contact__is_mql');
+    expect(field).toMatchObject({ type: 'STRING', kind: 'text' });
+    expect(field).not.toHaveProperty('joinedType');
+  });
+
   it('puts instances with the same label into one group, ordered by depth', () => {
     const session = index.groups.find((g) => g.label === 'Session')!;
     expect(session).toMatchObject({ title: 'Session', dataMartId: DM.session });

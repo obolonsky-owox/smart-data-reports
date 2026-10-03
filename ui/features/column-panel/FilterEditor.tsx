@@ -3,9 +3,9 @@ import { Button } from '@owox/ui/components/button';
 import { Input } from '@owox/ui/components/input';
 import { Switch } from '@owox/ui/components/switch';
 import { NativeSelect } from '../../components/NativeSelect';
-import { coerceFilterValue, newFilterId, operatorsFor, type OperatorOption } from '../../lib/filter-operators';
+import { coerceFilterValue, filterKind, newFilterId, operatorsFor, type OperatorOption } from '../../lib/filter-operators';
 import type { DraftFilter, FilterOperator } from '../../lib/report-draft';
-import type { FieldInfo } from '../../lib/schema-index';
+import type { FieldInfo, FieldKind } from '../../lib/schema-index';
 
 /** What the operator select and value inputs hold while a rule is being edited. */
 export interface RuleInput {
@@ -15,28 +15,34 @@ export interface RuleInput {
   range: { from: string; to: string };
 }
 
-export function ruleInputFor(field: FieldInfo, filter?: DraftFilter): RuleInput {
+/** `kind` is what the rule compares against; see `filterKind`. */
+export function ruleInputFor(kind: FieldKind, filter?: DraftFilter): RuleInput {
   const value = filter?.value;
   const range = (value as { from?: unknown; to?: unknown } | undefined) ?? {};
   return {
-    operator: filter?.operator ?? operatorsFor(field.kind)[0]?.operator,
+    operator: filter?.operator ?? operatorsFor(kind)[0]?.operator,
     single: filter && !Array.isArray(value) && typeof value !== 'object' ? String(value ?? '') : '',
     list: Array.isArray(value) ? (value as unknown[]).join('\n') : '',
     range: { from: String(range.from ?? ''), to: String(range.to ?? '') },
   };
 }
 
-/** The chosen operator and the value coerced for it, or undefined when the field has no such operator. */
-export function ruleFromInput(field: FieldInfo, input: RuleInput): { option: OperatorOption; value: unknown } | undefined {
-  const option = operatorsFor(field.kind).find((o) => o.operator === input.operator);
+/** The chosen operator and the value coerced for it, or undefined when the kind has no such operator. */
+export function ruleFromInput(kind: FieldKind, input: RuleInput): { option: OperatorOption; value: unknown } | undefined {
+  const option = operatorsFor(kind).find((o) => o.operator === input.operator);
   if (!option) return undefined;
   const raw = option.input === 'range' ? input.range : option.input === 'list' ? input.list : input.single;
-  return { option, value: coerceFilterValue(field.kind, option.input, raw) };
+  return { option, value: coerceFilterValue(kind, option.input, raw) };
+}
+
+/** The input kept when a rule switches between filter and slice, or a fresh one when its operator no longer applies. */
+export function ruleInputForKind(kind: FieldKind, input: RuleInput): RuleInput {
+  return operatorsFor(kind).some((o) => o.operator === input.operator) ? input : ruleInputFor(kind);
 }
 
 /** Operator select plus the value inputs the operator needs. */
-export function FilterValueFields({ field, input, onChange }: { field: FieldInfo; input: RuleInput; onChange(next: RuleInput): void }) {
-  const options = operatorsFor(field.kind);
+export function FilterValueFields({ kind, input, onChange }: { kind: FieldKind; input: RuleInput; onChange(next: RuleInput): void }) {
+  const options = operatorsFor(kind);
   const option = options.find((o) => o.operator === input.operator);
   return (
     <>
@@ -52,7 +58,7 @@ export function FilterValueFields({ field, input, onChange }: { field: FieldInfo
           aria-label='Value'
           className='h-8'
           value={input.single}
-          inputMode={field.kind === 'number' ? 'decimal' : undefined}
+          inputMode={kind === 'number' ? 'decimal' : undefined}
           onChange={(e) => onChange({ ...input, single: e.target.value })}
         />
       )}
@@ -88,10 +94,16 @@ interface FilterEditorProps {
 }
 
 export function FilterEditor({ field, instanceLabel, mainTitle, isJoined, filter, onSave, onCancel }: FilterEditorProps) {
-  const [input, setInput] = useState(() => ruleInputFor(field, filter));
   const [sliceOnly, setSliceOnly] = useState(filter?.sliceOnly ?? false);
+  const kind = filterKind(field, isJoined && sliceOnly);
+  const [input, setInput] = useState(() => ruleInputFor(kind, filter));
 
-  const rule = ruleFromInput(field, input);
+  const rule = ruleFromInput(kind, input);
+
+  function changeSliceOnly(next: boolean) {
+    setSliceOnly(next);
+    setInput((current) => ruleInputForKind(filterKind(field, isJoined && next), current));
+  }
   if (!rule) return <p className='px-3 text-xs text-muted-foreground'>This field can't be filtered here.</p>;
 
   function save() {
@@ -117,10 +129,10 @@ export function FilterEditor({ field, instanceLabel, mainTitle, isJoined, filter
   // blocks form submission there before a submit event ever fires.
   return (
     <div role='form' aria-label={`Filter ${field.label}`} onKeyDown={onKeyDown} className='flex flex-col gap-2 rounded-md border border-border bg-card p-3'>
-      <FilterValueFields field={field} input={input} onChange={setInput} />
+      <FilterValueFields kind={kind} input={input} onChange={setInput} />
       {isJoined && (
         <label className='flex items-start gap-2 text-sm'>
-          <Switch checked={sliceOnly} onCheckedChange={setSliceOnly} aria-label={`Only narrow ${instanceLabel}`} />
+          <Switch checked={sliceOnly} onCheckedChange={changeSliceOnly} aria-label={`Only narrow ${instanceLabel}`} />
           <span>
             Only narrow {instanceLabel}
             <span className='block text-xs text-muted-foreground'>Keeps every {mainTitle} row and filters {instanceLabel} before the join.</span>

@@ -1,8 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DM, VISITOR_SCHEMA } from '../../fixtures/smart-data';
+import { DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
 import { buildSchemaIndex } from '../../lib/schema-index';
-import { addColumn, emptyDraft, upsertFilter, type ReportDraft } from '../../lib/report-draft';
+import { addColumn, emptyDraft, setAggregations, setDateTrunc, upsertFilter, type ReportDraft } from '../../lib/report-draft';
 import { renderUi } from '../../test/render';
 import { SelectedTab } from './SelectedTab';
 
@@ -16,10 +16,12 @@ function setup(draft: ReportDraft, pendingFilterField: string | null = null) {
     onRemoveDateRange: vi.fn(),
     onUpsertFilter: vi.fn(),
     onRemoveFilter: vi.fn(),
+    onSetAggregations: vi.fn(),
+    onSetDateTrunc: vi.fn(),
     onMoveColumn: vi.fn(),
     onRemoveColumn: vi.fn(),
   };
-  renderUi(<SelectedTab index={index} draft={draft} pendingFilterField={pendingFilterField} {...handlers} />);
+  renderUi(<SelectedTab index={index} graph={VISITOR_GRAPH} draft={draft} pendingFilterField={pendingFilterField} {...handlers} />);
   return handlers;
 }
 
@@ -123,4 +125,58 @@ it('marks date ranges and filters as ODM filters or slices', async () => {
   const filters = screen.getByRole('region', { name: 'Filters' });
   expect(within(filters).getByRole('button', { name: 'Slice' })).toBeInTheDocument();
   expect(within(filters).queryByText(/only narrows/)).not.toBeInTheDocument();
+});
+
+it('puts Filters & Slices first, with Date ranges before Filters, then Aggregations and Columns', () => {
+  setup(add(emptyDraft(DM.visitor), 'email'));
+  const titles = screen.getAllByRole('heading').map((h) => h.textContent);
+  expect(titles).toEqual(['Filters & Slices', 'Date ranges', 'Filters', 'Aggregations', 'Columns']);
+  const outer = screen.getByRole('region', { name: 'Filters & Slices' });
+  expect(within(outer).getByRole('region', { name: 'Date ranges' })).toBeInTheDocument();
+  expect(within(outer).getByRole('region', { name: 'Filters' })).toBeInTheDocument();
+});
+
+it('shows each column with its data type, like the field picker', () => {
+  setup(add(emptyDraft(DM.visitor), 'email', 'contact__is_mql'));
+  const columns = screen.getByRole('region', { name: 'Columns' });
+  expect(within(columns).getByText('(STRING)')).toBeInTheDocument();
+  expect(within(columns).getByText('(BOOLEAN)')).toBeInTheDocument();
+  expect(within(columns).queryByText('ABC')).not.toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Date ranges' })).getAllByText('(DATE)')).not.toHaveLength(0);
+});
+
+it('lists aggregations and date buckets, and edits or removes them', async () => {
+  const base = add(emptyDraft(DM.visitor), 'visits', 'creation_date', 'email');
+  const draft = setDateTrunc(setAggregations(base, 'visits', ['SUM', 'AVG']), 'creation_date', 'MONTH');
+  const h = setup(draft);
+  const section = screen.getByRole('region', { name: 'Aggregations' });
+  expect(within(section).getByText('Sum, Average')).toBeInTheDocument();
+  expect(within(section).getByText('Month bucket')).toBeInTheDocument();
+  expect(within(section).queryByText('Email')).not.toBeInTheDocument();
+
+  await userEvent.click(within(section).getByRole('button', { name: 'Remove aggregation Creation Date' }));
+  expect(h.onSetDateTrunc).toHaveBeenCalledWith('creation_date', undefined);
+  await userEvent.click(within(section).getByRole('button', { name: 'Remove aggregation Visits' }));
+  expect(h.onSetAggregations).toHaveBeenCalledWith('visits', undefined);
+
+  await userEvent.click(within(section).getByRole('button', { name: 'Edit aggregation Visits' }));
+  await userEvent.click(await screen.findByRole('checkbox', { name: 'Max' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  expect(h.onSetAggregations).toHaveBeenLastCalledWith('visits', ['SUM', 'AVG', 'MAX']);
+});
+
+it('says how to add an aggregation when there is none', () => {
+  setup(add(emptyDraft(DM.visitor), 'email'));
+  expect(within(screen.getByRole('region', { name: 'Aggregations' })).getByText(/No aggregations/)).toBeInTheDocument();
+});
+
+it('previews the join path when hovering the data mart of a joined column', async () => {
+  setup(add(emptyDraft(DM.visitor), 'email', 'sessions__source'));
+  const columns = screen.getByRole('region', { name: 'Columns' });
+  await userEvent.hover(within(columns).getByText('Session'));
+  const list = await screen.findByRole('list', { name: 'Join path' }, { timeout: 2000 });
+  expect(within(list).getByText('Visitor')).toBeInTheDocument();
+  expect(within(list).getByText('client_id = client_id')).toBeInTheDocument();
+  // The main data mart's own fields have no join path to show.
+  expect(within(columns).getByText('Visitor').closest('[tabindex]')).toBeNull();
 });

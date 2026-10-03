@@ -5,11 +5,11 @@ import { DATA_MARTS, DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/sm
 import { buildSchemaIndex } from '../../lib/schema-index';
 import type { AggregateFunction, DateTruncUnit } from '../../lib/odm-types';
 import {
-  addColumn, changeInstancePath, emptyDraft, removeColumn, removeFilter, setAggregations, setDateTrunc,
+  addColumn, changeInstancePath, emptyDraft, includePath, removeColumn, removeFilter, setAggregations, setDateTrunc,
   upsertFilter, type DraftFilter, type ReportDraft,
 } from '../../lib/report-draft';
 import { renderUi } from '../../test/render';
-import { AllFieldsTab } from './AllFieldsTab';
+import { AllFieldsTab, type FocusRequest } from './AllFieldsTab';
 
 const index = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, VISITOR_SCHEMA);
 
@@ -21,12 +21,13 @@ interface Spies {
   onChangeInstancePath?: (from: string, to: string) => void;
 }
 
-function Harness({ initial = emptyDraft(DM.visitor), spies = {} }: { initial?: ReportDraft; spies?: Spies }) {
+function Harness({ initial = emptyDraft(DM.visitor), spies = {}, focusRequest = null }: { initial?: ReportDraft; spies?: Spies; focusRequest?: FocusRequest | null }) {
   const [draft, setDraft] = useState(initial);
   return (
     <>
       <AllFieldsTab
         index={index}
+        focusRequest={focusRequest}
         graph={VISITOR_GRAPH}
         draft={draft}
         marts={DATA_MARTS}
@@ -391,4 +392,42 @@ it('says when a join has no description', async () => {
   expect(nodesOf(card)).toEqual(['Visitor', 'Contact', 'Contact First Session']);
   expect(within(card).getByText('first_session_id = session_id')).toBeInTheDocument();
   expect(within(card).getByText('No description.')).toBeInTheDocument();
+});
+
+describe('revealing a data mart added on the canvas', () => {
+  const hintOf = (label: string) => groupHeader(label).parentElement!.querySelector('[data-slot="focus-hint"]');
+
+  it('opens its group on the added path, scrolls it to the middle and blinks it', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const draft = includePath(emptyDraft(DM.visitor), 'contact.sessions');
+    const { rerender } = renderUi(<Harness initial={draft} />);
+    expect(hintOf('Session')).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'via Contact › Session' })).not.toBeInTheDocument();
+
+    rerender(<Harness initial={draft} focusRequest={{ path: 'contact.sessions', nonce: 1 }} />);
+    expect(screen.getByRole('radio', { name: 'via Contact › Session' })).toBeChecked();
+    expect(hintOf('Session')).not.toBeNull();
+    expect(hintOf('Contact')).toBeNull();
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+    expect(scrollIntoView.mock.contexts[0]).toBe(groupHeader('Session').parentElement);
+  });
+
+  it('blinks again on a second request for the same path', () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { rerender } = renderUi(<Harness focusRequest={{ path: 'sessions', nonce: 1 }} />);
+    const first = hintOf('Session');
+    rerender(<Harness focusRequest={{ path: 'sessions', nonce: 2 }} />);
+    expect(hintOf('Session')).not.toBe(first);
+  });
+
+  it('clears a search that would hide the group', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { rerender } = renderUi(<Harness />);
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search fields' }), 'Email');
+    expect(screen.queryByRole('button', { name: 'Landing page · Page' })).not.toBeInTheDocument();
+    rerender(<Harness focusRequest={{ path: 'landing_page', nonce: 1 }} />);
+    expect(screen.getByRole('searchbox', { name: 'Search fields' })).toHaveValue('');
+    expect(hintOf('Landing page · Page')).not.toBeNull();
+  });
 });

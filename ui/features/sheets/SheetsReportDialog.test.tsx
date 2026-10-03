@@ -21,7 +21,7 @@ it('creates a report in a chosen destination and offers both links', async () =>
   await userEvent.click(screen.getByRole('button', { name: 'Open spreadsheet' }));
   expect(__mock.state.opened).toEqual(['https://docs.google.com/spreadsheets/d/sheet-1/edit#gid=0']);
   await userEvent.click(screen.getByRole('button', { name: 'Open report in ODM' }));
-  expect(__mock.state.navigations).toEqual([`/ui/demo-project/data-marts/${DM.visitor}/reports`]);
+  expect(__mock.state.navigations).toEqual([`/ui/demo-project/data-marts/${DM.visitor}/reports?reportId=report-2`]);
 });
 
 it('sends the user to Destinations when there is no Google Sheets connection', async () => {
@@ -81,5 +81,5 @@ it('never offers a second Create once the report exists, and can be closed while
   expect(screen.queryByRole('button', { name: 'Create report' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Update report' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Open report in ODM' }));
-  expect(__mock.state.navigations).toEqual([`/ui/demo-project/data-marts/${DM.visitor}/reports`]);
+  expect(__mock.state.navigations).toEqual([`/ui/demo-project/data-marts/${DM.visitor}/reports?reportId=report-2`]);
 });

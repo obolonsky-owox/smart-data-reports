@@ -36,6 +36,7 @@ const NATIVE: Record<MartId, NativeField[]> = {
   [DM.contact]: [
     { name: 'creation_date', type: 'DATE', alias: 'Creation Date' },
     { name: 'name', type: 'STRING', alias: 'Name' },
+    { name: 'is_mql', type: 'BOOLEAN', alias: 'isMQL' },
   ],
   [DM.user]: [
     { name: 'creation_date', type: 'DATE', alias: 'Creation Date' },
@@ -106,7 +107,8 @@ function blendedFor(join: Join): BlendedField[] {
       sourceDataMartTitle: TITLES[join.martId],
       targetAlias: lastSegment(join.aliasPath),
       originalFieldName: f.name,
-      type: f.type,
+      // ODM folds a joined BOOLEAN with STRING_AGG by default, so its joined type is STRING.
+      type: f.type === 'BOOLEAN' ? 'STRING' : f.type,
       sourceFieldType: f.type,
       alias: f.alias ?? '',
       description: f.description ?? '',

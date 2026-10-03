@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Info, Search } from 'lucide-react';
 import { Badge } from '@owox/ui/components/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@owox/ui/components/collapsible';
@@ -12,6 +12,12 @@ import { activeVariant, hasSelections, type DraftFilter, type ReportDraft } from
 import { chainLabel, type AliasPath, type FieldInfo, type MartGroup, type SchemaIndex } from '../../lib/schema-index';
 import { FieldRow } from './FieldRow';
 import { JoinPathHoverCard } from './JoinPathPreview';
+
+/** Reveal the data mart of `path`; `nonce` tells two requests for the same path apart. */
+export interface FocusRequest {
+  path: AliasPath;
+  nonce: number;
+}
 
 export interface AllFieldsTabProps {
   index: SchemaIndex;
@@ -27,12 +33,21 @@ export interface AllFieldsTabProps {
   onSetDateTrunc(column: string, unit: DateTruncUnit | undefined): void;
   onUpsertFilter(filter: DraftFilter): void;
   onRemoveFilter(id: string): void;
+  /** A data mart just added elsewhere, e.g. on the canvas: its group opens, scrolls into view and blinks. */
+  focusRequest?: FocusRequest | null;
 }
 
 export function AllFieldsTab(props: AllFieldsTabProps) {
-  const { index, draft, marts } = props;
+  const { index, draft, marts, focusRequest } = props;
   const [query, setQuery] = useState('');
   const [selectedOnly, setSelectedOnly] = useState(false);
+  // A search or "Show selected only" could hide the group being revealed.
+  const [focusNonce, setFocusNonce] = useState(focusRequest?.nonce);
+  if (focusRequest && focusRequest.nonce !== focusNonce) {
+    setFocusNonce(focusRequest.nonce);
+    setQuery('');
+    setSelectedOnly(false);
+  }
 
   const selected = useMemo(() => new Set(draft.columns.map((c) => c.name)), [draft]);
   const main = index.instances.get('')!;
@@ -68,6 +83,7 @@ export function AllFieldsTab(props: AllFieldsTabProps) {
             visible={visible}
             filtering={!!needle || selectedOnly}
             searching={!!needle}
+            focus={focusRequest && group.instances.some((i) => i.aliasPath === focusRequest.path) ? focusRequest : null}
           />
         ))}
       </div>
@@ -97,11 +113,13 @@ interface AliasGroupSectionProps extends AllFieldsTabProps {
   filtering: boolean;
   /** A search opens every group it reaches; the user may still collapse one afterwards. */
   searching: boolean;
+  /** Set when this group holds the data mart to reveal. */
+  focus: FocusRequest | null;
 }
 
 /** One Output Alias: its join paths to choose from, then the fields of the active one. */
 function AliasGroupSection(props: AliasGroupSectionProps) {
-  const { index, graph, draft, group, mainTitle, selected, visible, filtering, searching } = props;
+  const { index, graph, draft, group, mainTitle, selected, visible, filtering, searching, focus } = props;
   const paths = useMemo(() => new Set(group.instances.map((i) => i.aliasPath)), [group]);
   const selectedCount = draft.columns.filter((c) => paths.has(c.aliasPath)).length;
   const isMain = group.key === '';
@@ -115,6 +133,19 @@ function AliasGroupSection(props: AliasGroupSectionProps) {
   const [chosen, setChosen] = useState<AliasPath>();
   const radioName = useId();
   const countId = useId();
+  const headerRef = useRef<HTMLDivElement>(null);
+
+  const [revealed, setRevealed] = useState<number>();
+  if (focus && focus.nonce !== revealed) {
+    setRevealed(focus.nonce);
+    setOpen(true);
+    // Show the requested path, unless the fields chosen on another path pin that one.
+    if (!hasSelections(draft, activeVariant(group, draft, chosen).aliasPath)) setChosen(focus.path);
+  }
+  const focusNonce = focus?.nonce;
+  useEffect(() => {
+    if (focusNonce !== undefined) headerRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [focusNonce]);
 
   const active = activeVariant(group, draft, chosen);
   const fields = active.fields.filter(visible);
@@ -140,7 +171,12 @@ function AliasGroupSection(props: AliasGroupSectionProps) {
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
       <section>
-        <div className='group/data-mart flex w-full items-center gap-1.5 rounded bg-secondary/50 px-1 py-1 transition-colors hover:bg-secondary/80 dark:bg-muted/50 dark:hover:bg-muted/80'>
+        <div
+          ref={headerRef}
+          className='group/data-mart relative flex w-full items-center gap-1.5 rounded bg-secondary/50 px-1 py-1 transition-colors hover:bg-secondary/80 dark:bg-muted/50 dark:hover:bg-muted/80'
+        >
+          {/* Remounted per request, so a second request blinks again. */}
+          {revealed !== undefined && <span key={revealed} data-slot='focus-hint' aria-hidden className='dm-focus-hint pointer-events-none absolute inset-0 rounded' />}
           <CollapsibleTrigger
             data-slot='alias-group-trigger'
             className='flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left'

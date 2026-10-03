@@ -85,8 +85,10 @@ export function SheetsReportDialog({ mode: initialMode, defaultTitle, dataMartId
   const actionMode = resumed ? 'update' : mode;
   // The run carries on in ODM without the dialog, so it may be closed once the link is stored.
   const canClose = step.kind !== 'working' || !!linked;
+  // A create that just finished carries the new link before the `linked` prop catches up.
+  const reportId = (step.kind === 'done' ? step.linked?.reportId : undefined) ?? linked?.reportId;
   const openInOdm = (
-    <Button variant='outline' className='w-fit' onClick={() => navigate(odmReportsPath(projectId, dataMartId))}>
+    <Button variant='outline' className='w-fit' onClick={() => navigate(odmReportsPath(projectId, dataMartId, reportId))}>
       Open report in ODM
     </Button>
   );

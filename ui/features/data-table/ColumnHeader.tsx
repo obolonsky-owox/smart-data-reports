@@ -8,7 +8,7 @@ import { cn } from '@owox/ui/lib/utils';
 import type { AggregateFunction, DateTruncUnit } from '../../lib/odm-types';
 import type { OutputColumn } from '../../lib/output-columns';
 import { aggregationsFor, FN_LABEL, TRUNC_OPTIONS } from '../../lib/aggregation-labels';
-import { describeFilter } from '../../lib/filter-operators';
+import { describeFilter, filterKind } from '../../lib/filter-operators';
 import type { ReportDraft } from '../../lib/report-draft';
 import { chainLabel, type SchemaIndex } from '../../lib/schema-index';
 
@@ -103,7 +103,7 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
       {current?.dateTrunc && <div className='text-xs text-primary'>{TRUNC_OPTIONS.find((t) => t.unit === current.dateTrunc)?.label}</div>}
       {filters.map((f) => (
         <span key={f.id} className='mt-1 inline-flex items-center gap-1 text-xs text-foreground'>
-          {describeFilter(f, field?.kind)}
+          {describeFilter(f, field && filterKind(field, f.sliceOnly))}
           <button type='button' aria-label={`Remove filter ${label}`} className='text-muted-foreground hover:text-foreground' onClick={() => onRemoveFilter(f.id)}>
             <X className='h-4 w-4' />
           </button>
