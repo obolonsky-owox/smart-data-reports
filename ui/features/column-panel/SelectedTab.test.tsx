@@ -61,10 +61,32 @@ it('edits and removes existing filters', async () => {
   expect(h.onRemoveFilter).toHaveBeenCalledWith('f1');
 });
 
+/** happy-dom lays nothing out; give each column row a 32px slot so dnd-kit can find its neighbours. */
+function layOutColumnRows() {
+  return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const row = this.closest('li');
+    const top = row ? [...row.parentElement!.children].indexOf(row) * 32 : 0;
+    const height = row ? 32 : 0;
+    return { x: 0, y: top, top, left: 0, width: 300, height, right: 300, bottom: top + height, toJSON: () => ({}) } as DOMRect;
+  });
+}
+
 it('reorders and removes columns, and flags unavailable ones', async () => {
   const draft = { ...add(emptyDraft(DM.visitor), 'email', 'client_id'), columns: [{ name: 'email', aliasPath: '' }, { name: 'client_id', aliasPath: '' }, { name: 'gone', aliasPath: '' }] };
   const h = setup(draft);
-  await userEvent.click(screen.getByRole('button', { name: 'Move Email down' }));
+  const columns = screen.getByRole('region', { name: 'Columns' });
+  expect(within(columns).queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
+
+  const layout = layOutColumnRows();
+  try {
+    // The drag handle's keyboard sensor: pick up, move one row down, drop.
+    within(columns).getAllByRole('button', { name: 'Drag to reorder' })[0]!.focus();
+    await userEvent.keyboard(' ');
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard(' ');
+  } finally {
+    layout.mockRestore();
+  }
   expect(h.onMoveColumn).toHaveBeenCalledWith(0, 1);
   expect(screen.getByText('Unavailable')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Remove column gone' }));

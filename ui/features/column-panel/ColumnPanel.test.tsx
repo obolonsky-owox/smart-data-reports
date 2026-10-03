@@ -60,3 +60,11 @@ it('opens the Selected tab with a filter editor when a filter is requested', () 
   expect(screen.getByRole('tab', { name: 'Selected (0)' })).toHaveAttribute('data-state', 'active');
   expect(screen.getByRole('form', { name: 'Filter Email' })).toBeInTheDocument();
 });
+
+it('keeps the data mart choice while the schema loads and shows a placeholder for the fields', () => {
+  setup({ index: null, graph: null, draft: emptyDraft(DM.session) });
+  expect(screen.getByRole('combobox', { name: 'Report on' })).toHaveTextContent('Session');
+  expect(screen.getByText('1 row = 1 Session')).toBeInTheDocument();
+  expect(screen.getByRole('status', { name: 'Loading fields' })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: 'All' })).not.toBeInTheDocument();
+});

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Columns3, Loader2, RefreshCw, Save, Sheet } from 'lucide-react';
+import { ArrowLeft, Columns3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, Save, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -31,6 +31,7 @@ import { ResultTable } from '../data-table/ResultTable';
 import { RelationshipCanvas } from '../canvas/RelationshipCanvas';
 import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
 import { SqlTab } from '../sql/SqlTab';
+import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
 import { useQueryRun } from './use-query-run';
 import { useReportDocument, type SaveOutcome } from './use-report-document';
 import { useSchema } from './use-schema';
@@ -68,7 +69,11 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const [filterRequest, setFilterRequest] = useState<{ field: string; nonce: number } | null>(null);
   const [sheets, setSheets] = useState<'create' | 'update' | null>(null);
   const [tab, setTab] = useState('table');
+  /** The side sheet on narrow screens. */
   const [panelOpen, setPanelOpen] = useState(false);
+  /** The column panel beside the report on wide screens. */
+  const [panelHidden, setPanelHidden] = useState(false);
+  const panelWidth = usePanelWidth();
   const [guarded, setGuarded] = useState<GuardedAction | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmBack, setConfirmBack] = useState(false);
@@ -112,8 +117,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const schema = useSchema(api, mainMart);
   const query = useQueryRun(api);
   // Right after the main data mart changes, the loaded schema can still be the old one's.
-  const index: SchemaIndex | null =
-    schema.state.status === 'ready' && schema.state.index.mainDataMartId === draft?.mainDataMartId ? schema.state.index : null;
+  const loaded = schema.state.status === 'ready' && schema.state.index.mainDataMartId === draft?.mainDataMartId ? schema.state : null;
+  const index: SchemaIndex | null = loaded?.index ?? null;
 
   // A result (or a running query) belongs to the main data mart it was applied on.
   const mainDataMartId = draft?.mainDataMartId;
@@ -226,7 +231,14 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   const openSheets = () => guard(linked ? 'update' : 'create');
 
-  const header = (
+  const panelShown = narrow ? panelOpen : !panelHidden;
+  function togglePanel() {
+    if (narrow) setPanelOpen((open) => !open);
+    else setPanelHidden((hidden) => !hidden);
+  }
+
+  /** `editing` adds the report's actions; only the editor layout has them. */
+  const header = (editing = false) => (
     <header className='dm-page-header flex flex-wrap items-center justify-between gap-2'>
       <div className='flex min-w-0 items-center gap-2'>
         <Button variant='ghost' size='icon' onClick={() => (doc.dirty ? setConfirmBack(true) : onBack())} aria-label='Back to reports'>
@@ -238,22 +250,20 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
           <h1 className='dm-page-header-title'>New report</h1>
         )}
       </div>
-      {draft && index && (
+      {editing && draft && (
         <div className='flex items-center gap-2'>
-          <Button variant='outline' disabled={!draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
+          <Button variant='outline' disabled={!index || !draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
             <Sheet className='h-4 w-4' />
             {linked ? 'Update Google Sheets' : 'Create Google Sheets report'}
           </Button>
           {doc.dirty && <span role='status' aria-label='Unsaved changes' className='size-2 rounded-full bg-primary' />}
-          <Button disabled={!doc.dirty || saving} onClick={() => guard('save')}>
+          <Button disabled={!index || !doc.dirty || saving} onClick={() => guard('save')}>
             {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className='h-4 w-4' />}
             {linked ? 'Save and update Google Sheets' : 'Save'}
           </Button>
-          {narrow && (
-            <Button variant='outline' size='icon' aria-label='Columns' onClick={() => setPanelOpen(true)}>
-              <Columns3 className='h-4 w-4' />
-            </Button>
-          )}
+          <Button variant='ghost' size='icon' aria-label={panelShown ? 'Hide column panel' : 'Show column panel'} onClick={togglePanel}>
+            {panelShown ? <PanelRightClose className='h-4 w-4' /> : <PanelRightOpen className='h-4 w-4' />}
+          </Button>
         </div>
       )}
       <AlertDialog open={confirmBack} onOpenChange={setConfirmBack}>
@@ -277,7 +287,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (doc.status === 'loading' || (!martsError && (!marts || membership === undefined))) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content flex flex-col gap-2'>
           <Skeleton className='h-10 w-full' />
           <Skeleton className='h-64 w-full' />
@@ -290,7 +300,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (fatal) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>{fatal.message}</AlertTitle>
@@ -358,7 +368,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (!draft) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         {startMarts.length === 0 ? (
           <div className='dm-empty-state'>
             <Columns3 className='dm-empty-state-ico' />
@@ -380,7 +390,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (!mainMart) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>This report's data mart is no longer available for reports.</AlertTitle>
@@ -397,7 +407,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (schema.state.status === 'error') {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>Couldn't load {mainMart?.title ?? 'this data mart'}</AlertTitle>
@@ -414,24 +424,14 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     );
   }
 
-  if (!index || schema.state.status !== 'ready') {
-    return (
-      <div className='dm-page' data-testid='editorPage'>
-        {header}
-        <div className='dm-page-content'>
-          <Skeleton className='h-64 w-full' />
-        </div>
-      </div>
-    );
-  }
-
-  const graph = schema.state.graph;
-  const noFields = index.instances.size === 1 && index.instances.get('')!.fields.length === 0;
-  const visibleIssues = issues.filter((i) => i.kind !== 'no-columns').map((i) => describeIssue(i, index));
+  // While the schema loads, the layout and the column panel stay mounted: only their contents wait.
+  const graph = loaded?.graph ?? null;
+  const noFields = !!index && index.instances.size === 1 && index.instances.get('')!.fields.length === 0;
+  const visibleIssues = index ? issues.filter((i) => i.kind !== 'no-columns').map((i) => describeIssue(i, index)) : [];
   const requestFilter = (field: string) => {
     setFilterRequest({ field, nonce: Date.now() });
-    // On wide screens the panel is already visible; the side sheet is only for narrow ones.
     if (narrow) setPanelOpen(true);
+    else setPanelHidden(false);
   };
 
   // The sidebar offers the main data mart's storage; nothing is reachable across storages.
@@ -464,7 +464,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onPendingFilterDone={() => setFilterRequest(null)}
       onChangeMain={(id) => void changeMain(id)}
       onApply={apply}
-      applyDisabled={issues.length > 0 || (query.state.status === 'success' && !stale)}
+      applyDisabled={!index || issues.length > 0 || (query.state.status === 'success' && !stale)}
       applying={query.state.status === 'running'}
       issues={visibleIssues}
     />
@@ -472,10 +472,12 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   return (
     <div className='dm-page flex h-full flex-col' data-testid='editorPage'>
-      {header}
+      {header(true)}
       <div className='flex min-h-0 flex-1'>
         <main className='dm-page-content min-w-0 flex-1 overflow-auto'>
-          {noFields ? (
+          {!index || !graph ? (
+            <Skeleton className='h-64 w-full' />
+          ) : noFields ? (
             <div className='dm-empty-state'>
               <h2 className='dm-empty-state-title'>This data mart has no fields available for reports</h2>
               <p className='dm-empty-state-subtitle'>Ask its owner to make fields visible for reporting, or pick another data mart.</p>
@@ -527,7 +529,15 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
             </Tabs>
           )}
         </main>
-        {!narrow && <aside className='flex w-[380px] shrink-0 border-l border-border'>{panel}</aside>}
+        {!narrow && !panelHidden && (
+          <>
+            <PanelResizeHandle width={panelWidth.width} min={panelWidth.min} max={panelWidth.max} onResize={panelWidth.setWidth} />
+            {/* The width is the user's drag result, so it is the one inline style here. */}
+            <aside className='flex min-w-0 shrink-0' style={{ width: panelWidth.width }}>
+              {panel}
+            </aside>
+          </>
+        )}
       </div>
 
       {narrow && (
@@ -541,7 +551,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
         </SidePanel>
       )}
 
-      {dateChoice && (
+      {dateChoice && index && (
         <DateChoiceDialog
           choice={dateChoice}
           index={index}

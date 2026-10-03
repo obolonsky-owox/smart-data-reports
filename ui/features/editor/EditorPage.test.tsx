@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { DM, sampleRows, STORAGE } from '../../fixtures/smart-data';
@@ -30,7 +30,8 @@ async function startVisitorReport() {
   renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
   await pickMart('Data mart', 'Visitor');
   await userEvent.click(screen.getByRole('button', { name: 'Start' }));
-  await screen.findByTestId('columnPanel');
+  // The panel mounts at once; its fields follow when the schema has loaded.
+  await screen.findByRole('checkbox', { name: 'Email (Visitor)' });
 }
 
 const lastQuery = () =>
@@ -238,7 +239,7 @@ it('shows a schema failure with a retry instead of a blank screen', async () => 
   expect(await screen.findByText("Couldn't load Visitor")).toBeInTheDocument();
   __mock.clearFailures();
   await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-  expect(await screen.findByTestId('columnPanel')).toBeInTheDocument();
+  expect(await screen.findByRole('checkbox', { name: 'Email (Visitor)' })).toBeInTheDocument();
 });
 
 const theirs: StoredReport = {
@@ -310,20 +311,122 @@ it('retries a failed report load', async () => {
   expect(await screen.findByTestId('columnPanel')).toBeInTheDocument();
 });
 
-it('mounts the column panel only in the side sheet on narrow screens', async () => {
-  const narrow = vi.spyOn(window, 'matchMedia').mockImplementation(
+const mockNarrowScreen = () =>
+  vi.spyOn(window, 'matchMedia').mockImplementation(
     (media) => ({ matches: true, media, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList,
   );
+
+it('mounts the column panel only in the side sheet on narrow screens', async () => {
+  const narrow = mockNarrowScreen();
   try {
     renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
     await pickMart('Data mart', 'Visitor');
     await userEvent.click(screen.getByRole('button', { name: 'Start' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Columns' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Show column panel' }));
     expect(await screen.findAllByTestId('columnPanel')).toHaveLength(1);
     expect(within(screen.getByRole('dialog')).getByTestId('columnPanel')).toBeInTheDocument();
+    expect(screen.queryByRole('separator', { name: 'Resize column panel' })).not.toBeInTheDocument();
   } finally {
     narrow.mockRestore();
   }
+});
+
+describe('the column panel layout', () => {
+  const initialWidth = window.innerWidth;
+  const resizeWindow = (width: number) =>
+    act(() => {
+      window.innerWidth = width;
+      window.dispatchEvent(new Event('resize'));
+    });
+
+  beforeEach(() => {
+    window.innerWidth = 1200;
+  });
+  afterEach(() => {
+    window.innerWidth = initialWidth;
+  });
+
+  const handle = () => screen.getByRole('separator', { name: 'Resize column panel' });
+  const panelWidth = () => screen.getByRole('complementary').style.width;
+
+  it('resizes by dragging its left edge, between 320px and 40% of the window', async () => {
+    await startVisitorReport();
+    expect(handle()).toHaveAttribute('aria-orientation', 'vertical');
+    expect(handle()).toHaveAttribute('aria-valuenow', '380');
+    expect(handle()).toHaveAttribute('aria-valuemin', '320');
+    expect(handle()).toHaveAttribute('aria-valuemax', '480');
+    expect(panelWidth()).toBe('380px');
+
+    fireEvent.pointerDown(handle(), { pointerId: 1, clientX: 800 });
+    fireEvent.pointerMove(handle(), { pointerId: 1, clientX: 750 });
+    expect(panelWidth()).toBe('430px');
+    fireEvent.pointerMove(handle(), { pointerId: 1, clientX: 100 });
+    expect(panelWidth()).toBe('480px');
+    fireEvent.pointerMove(handle(), { pointerId: 1, clientX: 1100 });
+    expect(panelWidth()).toBe('320px');
+    fireEvent.pointerMove(handle(), { pointerId: 1, clientX: 760 });
+    fireEvent.pointerUp(handle(), { pointerId: 1, clientX: 760 });
+    expect(panelWidth()).toBe('420px');
+    // The drag is over: moving the pointer no longer resizes.
+    fireEvent.pointerMove(handle(), { pointerId: 1, clientX: 700 });
+    expect(panelWidth()).toBe('420px');
+    expect(handle()).toHaveAttribute('aria-valuenow', '420');
+
+    // A narrower window lowers the maximum and clamps the panel to it.
+    resizeWindow(1000);
+    expect(handle()).toHaveAttribute('aria-valuemax', '400');
+    expect(panelWidth()).toBe('400px');
+  });
+
+  it('resizes with the arrow keys in 16px steps', async () => {
+    await startVisitorReport();
+    handle().focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(panelWidth()).toBe('396px');
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}');
+    expect(panelWidth()).toBe('364px');
+    for (let i = 0; i < 5; i++) await userEvent.keyboard('{ArrowRight}');
+    expect(panelWidth()).toBe('320px');
+    for (let i = 0; i < 20; i++) await userEvent.keyboard('{ArrowLeft}');
+    expect(handle()).toHaveAttribute('aria-valuenow', '480');
+  });
+
+  it('hides the panel so the report takes the full width, and restores its width', async () => {
+    await startVisitorReport();
+    handle().focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide column panel' }));
+    expect(screen.queryByTestId('columnPanel')).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Data table' })).toBeInTheDocument();
+    expect(screen.getByText('Pick columns and click Apply')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show column panel' }));
+    expect(screen.getByTestId('columnPanel')).toBeInTheDocument();
+    expect(panelWidth()).toBe('396px');
+  });
+
+  it.each([
+    ['wide', false],
+    ['narrow', true],
+  ])('keeps the panel and the focus while a new main data mart loads on %s screens', async (_screen, isNarrow) => {
+    const narrow = isNarrow ? mockNarrowScreen() : undefined;
+    try {
+      renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
+      await pickMart('Data mart', 'Visitor');
+      await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+      if (isNarrow) await userEvent.click(await screen.findByRole('button', { name: 'Show column panel' }));
+      await screen.findByRole('checkbox', { name: 'Email (Visitor)' });
+      const panel = screen.getByTestId('columnPanel');
+      await pickMart('Report on', 'Session');
+      expect(await screen.findByText('1 row = 1 Session')).toBeInTheDocument();
+      await screen.findAllByRole('checkbox', { name: /\(Session\)$/ });
+      expect(screen.getByTestId('columnPanel')).toBe(panel);
+      expect(screen.getByRole('combobox', { name: 'Report on' })).toHaveFocus();
+    } finally {
+      narrow?.mockRestore();
+    }
+  });
 });
 
 describe('saving a report linked to Google Sheets', () => {
