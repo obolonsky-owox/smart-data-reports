@@ -30,10 +30,19 @@ export interface InstanceInfo {
   fields: FieldInfo[];
 }
 
+/**
+ * Instances that share an Output Alias (`InstanceInfo.label`) on one data mart: the same data shown under one
+ * name, reached through different join paths. The main data mart is always a group of its own.
+ */
 export interface MartGroup {
+  /** Unique within the index. */
+  key: string;
+  label: string;
   dataMartId: string;
+  /** The data mart's title; differs from `label` when the relationship has an Output Alias. */
   title: string;
   description: string;
+  /** The join paths, shallowest first. */
   instances: InstanceInfo[];
 }
 
@@ -136,21 +145,29 @@ export function buildSchemaIndex(main: { id: string; title: string }, schema: Bl
     });
   }
 
-  const byMart = new Map<string, MartGroup>();
+  const byAlias = new Map<string, MartGroup>();
   for (const instance of instances.values()) {
-    let group = byMart.get(instance.dataMartId);
+    const key = instance.aliasPath === '' ? '' : `${instance.label}\u0000${instance.dataMartId}`;
+    let group = byAlias.get(key);
     if (!group) {
-      group = { dataMartId: instance.dataMartId, title: instance.title, description: instance.description, instances: [] };
-      byMart.set(instance.dataMartId, group);
+      group = {
+        key,
+        label: instance.label,
+        dataMartId: instance.dataMartId,
+        title: instance.title,
+        description: instance.description,
+        instances: [],
+      };
+      byAlias.set(key, group);
     }
     group.instances.push(instance);
   }
-  const groups = [...byMart.values()];
+  const groups = [...byAlias.values()];
   for (const group of groups) {
     group.instances.sort((a, b) => a.depth - b.depth || a.aliasPath.localeCompare(b.aliasPath));
   }
   groups.sort((a, b) =>
-    a.dataMartId === main.id ? -1 : b.dataMartId === main.id ? 1 : a.title.localeCompare(b.title),
+    a.key === '' ? -1 : b.key === '' ? 1 : a.label.localeCompare(b.label) || a.title.localeCompare(b.title),
   );
 
   const fields = new Map<string, FieldInfo>();

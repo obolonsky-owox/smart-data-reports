@@ -1,5 +1,5 @@
 import { DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../fixtures/smart-data';
-import { joinPath } from './join-path';
+import { joinPath, variantLabels } from './join-path';
 import { buildSchemaIndex } from './schema-index';
 
 const index = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, VISITOR_SCHEMA);
@@ -42,4 +42,36 @@ it('shows only the main data mart for the main path or an unknown one', () => {
   for (const aliasPath of ['', 'nowhere']) {
     expect(joinPath(index, VISITOR_GRAPH, aliasPath)).toEqual({ nodes: [{ label: 'Visitor', dataMartId: DM.visitor }], hops: [] });
   }
+});
+
+describe('variantLabels', () => {
+  it('names each join path by its chain', () => {
+    expect(variantLabels(index, VISITOR_GRAPH, ['sessions', 'contact.sessions'])).toEqual(['via Session', 'via Contact › Session']);
+  });
+
+  // contact.first_session relabelled "Session" reads "via Contact › Session", like contact.sessions.
+  const twins = buildSchemaIndex(
+    { id: DM.visitor, title: 'Visitor' },
+    {
+      ...VISITOR_SCHEMA,
+      availableSources: VISITOR_SCHEMA.availableSources.map((s) =>
+        s.aliasPath === 'contact.first_session' ? { ...s, defaultAlias: 'Session' } : s,
+      ),
+    },
+  );
+
+  it('tells apart paths with the same chain by the keys of the first join that differs', () => {
+    expect(variantLabels(twins, VISITOR_GRAPH, ['sessions', 'contact.sessions', 'contact.first_session'])).toEqual([
+      'via Session',
+      'via Contact › Session · contact_id = contact_id',
+      'via Contact › Session · first_session_id = session_id, contact_id = contact_id',
+    ]);
+  });
+
+  it('falls back to the alias path when the keys do not differ', () => {
+    expect(variantLabels(twins, { rootDataMartId: DM.visitor, nodes: [] }, ['contact.sessions', 'contact.first_session'])).toEqual([
+      'via Contact › Session · contact.sessions',
+      'via Contact › Session · contact.first_session',
+    ]);
+  });
 });

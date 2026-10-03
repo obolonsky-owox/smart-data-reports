@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronUp, GripVertical, Plus, X } from 'lucide-react';
+import { GripVertical, Plus, X } from 'lucide-react';
 import { Badge } from '@owox/ui/components/badge';
 import { Button } from '@owox/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@owox/ui/components/popover';
@@ -31,7 +31,7 @@ export interface SelectedTabProps {
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section aria-label={title} className='flex flex-col gap-1 border-b border-border py-2 last:border-b-0'>
+    <section aria-label={title} className='flex min-w-0 flex-col gap-1 border-b border-border py-2 last:border-b-0'>
       <div className='flex items-center justify-between px-3'>
         <h3 className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>{title}</h3>
         {action}
@@ -45,8 +45,8 @@ function SortableRow({ id, children }: { id: string; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
   return (
     // dnd-kit positions the dragged row through a transform; that is the one inline style here.
-    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className='flex items-center gap-2 px-3 py-1'>
-      <button type='button' aria-label='Drag to reorder' className='cursor-grab text-muted-foreground' {...attributes} {...listeners}>
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className='flex min-w-0 items-center gap-2 px-3 py-1'>
+      <button type='button' aria-label='Drag to reorder' className='shrink-0 cursor-grab text-muted-foreground' {...attributes} {...listeners}>
         <GripVertical className='h-4 w-4' />
       </button>
       {children}
@@ -83,7 +83,7 @@ export function SelectedTab(props: SelectedTabProps) {
   }
 
   return (
-    <div className='flex flex-col'>
+    <div className='flex min-w-0 flex-col'>
       <Section
         title='Date ranges'
         action={
@@ -119,17 +119,17 @@ export function SelectedTab(props: SelectedTabProps) {
         {draft.dateRanges.map((range) => (
           <div key={range.column} className='flex items-start gap-2 px-3 py-1'>
             <TypeBadge kind='date' className='mt-2' />
-            <div className='flex flex-1 flex-col gap-1'>
-              <div className='flex items-center justify-between text-sm'>
-                <span>{fieldLabel(range.column)}</span>
-                <span className='flex items-center gap-1 text-xs text-muted-foreground'>
-                  {martLabel(range.aliasPath)}
+            <div className='flex min-w-0 flex-1 flex-col gap-1'>
+              <div className='flex min-w-0 items-center justify-between gap-2 text-sm'>
+                <span className='min-w-0 truncate'>{fieldLabel(range.column)}</span>
+                <span className='flex min-w-0 items-center gap-1 text-xs text-muted-foreground'>
+                  <span className='truncate'>{martLabel(range.aliasPath)}</span>
                   <PlacementMarker placement={dateRangePlacement(range.aliasPath)} kind='period' mainLabel={main.title} instanceLabel={martLabel(range.aliasPath)} />
                 </span>
               </div>
               <DateRangeEditor value={range.range} label={fieldLabel(range.column)} onChange={(value) => props.onSetDateRange(range.column, value)} />
             </div>
-            <Button variant='ghost' size='icon' className='size-7' aria-label={`Remove date range ${fieldLabel(range.column)}`} onClick={() => props.onRemoveDateRange(range.column)}>
+            <Button variant='ghost' size='icon' className='size-7 shrink-0' aria-label={`Remove date range ${fieldLabel(range.column)}`} onClick={() => props.onRemoveDateRange(range.column)}>
               <X className='h-4 w-4' />
             </Button>
           </div>
@@ -202,18 +202,18 @@ export function SelectedTab(props: SelectedTabProps) {
                   onCancel={() => setEditingFilter(null)}
                 />
               ) : (
-                <div className='flex items-center gap-2'>
-                  <button type='button' className='flex flex-1 flex-col text-left' onClick={() => setEditingFilter(filter.id)}>
-                    <span className='flex justify-between text-sm'>
-                      {fieldLabel(filter.column)}
-                      <span className='text-xs text-muted-foreground'>{martLabel(filter.aliasPath)}</span>
+                <div className='flex min-w-0 items-center gap-2'>
+                  <button type='button' className='flex min-w-0 flex-1 flex-col text-left' onClick={() => setEditingFilter(filter.id)}>
+                    <span className='flex min-w-0 justify-between gap-2 text-sm'>
+                      <span className='min-w-0 truncate'>{fieldLabel(filter.column)}</span>
+                      <span className='max-w-[40%] truncate text-xs text-muted-foreground'>{martLabel(filter.aliasPath)}</span>
                     </span>
-                    <span className='text-xs text-muted-foreground'>
+                    <span className='truncate text-xs text-muted-foreground'>
                       {describeFilter(filter, index.fields.get(filter.column)?.kind)}
                     </span>
                   </button>
                   <PlacementMarker placement={filterPlacement(filter)} kind='filter' mainLabel={main.title} instanceLabel={martLabel(filter.aliasPath)} />
-                  <Button variant='ghost' size='icon' className='size-7' aria-label={`Remove filter ${fieldLabel(filter.column)}`} onClick={() => props.onRemoveFilter(filter.id)}>
+                  <Button variant='ghost' size='icon' className='size-7 shrink-0' aria-label={`Remove filter ${fieldLabel(filter.column)}`} onClick={() => props.onRemoveFilter(filter.id)}>
                     <X className='h-4 w-4' />
                   </Button>
                 </div>
@@ -228,21 +228,17 @@ export function SelectedTab(props: SelectedTabProps) {
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={names} strategy={verticalListSortingStrategy}>
             <ul className='flex flex-col'>
-              {draft.columns.map((column, i) => {
+              {draft.columns.map((column) => {
                 const field = index.fields.get(column.name);
                 const label = field?.label ?? column.name;
                 return (
                   <SortableRow key={column.name} id={column.name}>
                     {field ? <TypeBadge kind={field.kind} /> : <Badge variant='destructive'>Unavailable</Badge>}
-                    <span className='flex-1 truncate text-sm'>{label}</span>
-                    <span className='text-xs text-muted-foreground'>{field ? martLabel(field.aliasPath) : ''}</span>
-                    <Button variant='ghost' size='icon' className='size-7' aria-label={`Move ${label} up`} disabled={i === 0} onClick={() => props.onMoveColumn(i, i - 1)}>
-                      <ChevronUp className='h-4 w-4' />
-                    </Button>
-                    <Button variant='ghost' size='icon' className='size-7' aria-label={`Move ${label} down`} disabled={i === draft.columns.length - 1} onClick={() => props.onMoveColumn(i, i + 1)}>
-                      <ChevronDown className='h-4 w-4' />
-                    </Button>
-                    <Button variant='ghost' size='icon' className='size-7' aria-label={`Remove column ${label}`} onClick={() => props.onRemoveColumn(column.name)}>
+                    <span className='min-w-0 flex-1 truncate text-sm' title={label}>
+                      {label}
+                    </span>
+                    {field && <span className='max-w-[40%] truncate text-xs text-muted-foreground'>{martLabel(field.aliasPath)}</span>}
+                    <Button variant='ghost' size='icon' className='size-7 shrink-0' aria-label={`Remove column ${label}`} onClick={() => props.onRemoveColumn(column.name)}>
                       <X className='h-4 w-4' />
                     </Button>
                   </SortableRow>

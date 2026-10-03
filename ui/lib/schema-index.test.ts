@@ -26,13 +26,41 @@ describe('paths', () => {
 });
 
 describe('buildSchemaIndex', () => {
-  it('groups instances by data mart with the main mart first', () => {
-    expect(index.groups.map((g) => g.title)).toEqual(['Visitor', 'Contact', 'Page', 'Pageview', 'Session', 'User']);
+  it('groups instances by output alias with the main mart first, then by label', () => {
+    expect(index.groups.map((g) => g.label)).toEqual([
+      'Visitor', 'Contact', 'Contact First Session', 'Landing page', 'Page', 'Pageview', 'Session', 'User',
+    ]);
   });
 
-  it('keeps one data mart reachable through several paths as separate instances', () => {
-    const page = index.groups.find((g) => g.dataMartId === DM.page)!;
-    expect(page.instances.map((i) => i.aliasPath)).toEqual(['landing_page', 'sessions.pageviews.page']);
+  it('puts instances with the same label into one group, ordered by depth', () => {
+    const session = index.groups.find((g) => g.label === 'Session')!;
+    expect(session).toMatchObject({ title: 'Session', dataMartId: DM.session });
+    expect(session.instances.map((i) => i.aliasPath)).toEqual(['sessions', 'contact.sessions']);
+  });
+
+  it('gives an aliased instance a group of its own that keeps the data mart title', () => {
+    const first = index.groups.find((g) => g.label === 'Contact First Session')!;
+    expect(first).toMatchObject({ title: 'Session', dataMartId: DM.session });
+    expect(first.instances.map((i) => i.aliasPath)).toEqual(['contact.first_session']);
+    expect(index.groups.find((g) => g.label === 'Landing page')!.instances.map((i) => i.aliasPath)).toEqual(['landing_page']);
+    expect(index.groups.find((g) => g.label === 'Page')!.instances.map((i) => i.aliasPath)).toEqual(['sessions.pageviews.page']);
+  });
+
+  it('keeps the main data mart alone in its group and separates one label on different data marts', () => {
+    const schema = {
+      ...VISITOR_SCHEMA,
+      availableSources: VISITOR_SCHEMA.availableSources.map((s) =>
+        s.aliasPath === 'contact.user' ? { ...s, defaultAlias: 'Visitor' } : s.aliasPath === 'landing_page' ? { ...s, defaultAlias: 'Contact' } : s,
+      ),
+    };
+    const relabelled = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, schema);
+    expect(relabelled.groups[0]!.instances.map((i) => i.aliasPath)).toEqual(['']);
+    expect(relabelled.groups.filter((g) => g.label === 'Visitor').map((g) => g.dataMartId)).toEqual([DM.visitor, DM.user]);
+    expect(relabelled.groups.filter((g) => g.label === 'Contact').map((g) => g.dataMartId)).toEqual([DM.contact, DM.page]);
+    expect(new Set(relabelled.groups.map((g) => g.key)).size).toBe(relabelled.groups.length);
+  });
+
+  it('finds every instance of a data mart whatever its label', () => {
     expect(instancesOf(index, DM.page).map((i) => i.label)).toEqual(['Landing page', 'Page']);
   });
 

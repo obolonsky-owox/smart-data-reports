@@ -2,7 +2,7 @@ import type { AggregateFunction, DateTruncUnit } from './odm-types';
 import type { DateRangeValue } from './date-ranges';
 import {
   dateFields, instancesOf, isSameOrDescendant,
-  type AliasPath, type FieldInfo, type SchemaIndex,
+  type AliasPath, type FieldInfo, type InstanceInfo, type MartGroup, type SchemaIndex,
 } from './schema-index';
 
 export type FilterOperator =
@@ -290,4 +290,27 @@ export function usedInstances(draft: ReportDraft): AliasPath[] {
       ...draft.filters.map((f) => f.aliasPath),
     ]),
   ];
+}
+
+/** Whether the instance holds columns, date ranges or filters. */
+export function hasSelections(draft: ReportDraft, path: AliasPath): boolean {
+  return (
+    draft.columns.some((c) => c.aliasPath === path) ||
+    draft.dateRanges.some((r) => r.aliasPath === path) ||
+    draft.filters.some((f) => f.aliasPath === path)
+  );
+}
+
+/**
+ * The join path a group shows its fields through: the one holding selections, else the user's local
+ * `chosen` path, else one already included in the report, else the shallowest.
+ */
+export function activeVariant(group: MartGroup, draft: ReportDraft, chosen?: AliasPath): InstanceInfo {
+  const { instances } = group;
+  return (
+    instances.find((i) => hasSelections(draft, i.aliasPath)) ??
+    instances.find((i) => i.aliasPath === chosen) ??
+    instances.find((i) => draft.includedPaths.includes(i.aliasPath)) ??
+    instances[0]!
+  );
 }

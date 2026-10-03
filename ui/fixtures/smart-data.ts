@@ -1,6 +1,6 @@
 import type {
   AvailableSource, BlendableSchema, BlendedField, DataMartSummary, MainGrainMultiplication,
-  NativeField, RelationshipGraph, Row,
+  NativeField, RelationshipGraph, Row, StorageSummary,
 } from '../lib/odm-types';
 
 export const DM = {
@@ -70,6 +70,19 @@ export const DATA_MARTS: DataMartSummary[] = (Object.values(DM) as MartId[]).map
   availableForReporting: true,
   storage: { type: id === DM.invoice ? 'SNOWFLAKE' : 'GOOGLE_BIGQUERY' },
 }));
+
+export const STORAGE = { bigquery: 'storage-bigquery', snowflake: 'storage-snowflake' } as const;
+
+export const STORAGES: StorageSummary[] = [
+  { id: STORAGE.bigquery, title: 'Marketing BigQuery', type: 'GOOGLE_BIGQUERY' },
+  { id: STORAGE.snowflake, title: 'Finance Snowflake', type: 'SNOWFLAKE' },
+];
+
+/** Data mart ids per storage, as the model canvas lists them. */
+export const STORAGE_MART_IDS: Record<string, string[]> = {
+  [STORAGE.bigquery]: DATA_MARTS.filter((m) => m.storage.type === 'GOOGLE_BIGQUERY').map((m) => m.id),
+  [STORAGE.snowflake]: [DM.invoice],
+};
 
 interface Join {
   aliasPath: string;
@@ -166,6 +179,9 @@ const VISITOR_JOINS: Join[] = [
   { aliasPath: 'sessions.pageviews', martId: DM.pageview, description: 'Pages viewed in the session.', grain: 'multiplies', keys: [['session_id', 'session_id'], ['client_id', 'client_id']] },
   { aliasPath: 'sessions.pageviews.page', martId: DM.page, description: 'The page that was viewed.', grain: 'multiplies', keys: [['page_id', 'id']] },
   { aliasPath: 'landing_page', martId: DM.page, label: 'Landing page', description: 'The first page the visitor landed on.', grain: 'none', keys: [['landing_page_id', 'id']] },
+  // Session again: once more under its default alias (a second path) and once under an Output Alias of its own.
+  { aliasPath: 'contact.sessions', martId: DM.session, description: 'Sessions of the contact on any device.', grain: 'multiplies', keys: [['contact_id', 'contact_id']] },
+  { aliasPath: 'contact.first_session', martId: DM.session, label: 'Contact First Session', description: '', grain: 'none', keys: [['first_session_id', 'session_id'], ['contact_id', 'contact_id']] },
 ];
 
 const SESSION_JOINS: Join[] = [

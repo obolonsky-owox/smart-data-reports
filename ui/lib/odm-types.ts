@@ -126,6 +126,13 @@ export interface DataMartSummary {
   storage: { type: string };
 }
 
+/** A data storage of the project; relationships never cross storages. */
+export interface StorageSummary {
+  id: string;
+  title: string;
+  type: string;
+}
+
 export type Row = Record<string, unknown>;
 /** Keys are `<column> | <FUNCTION>`, e.g. `visits | SUM`. */
 export type Totals = Record<string, number | string | boolean | null>;

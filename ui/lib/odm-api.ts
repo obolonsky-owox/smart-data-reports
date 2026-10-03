@@ -1,6 +1,6 @@
 import type {
   BlendableSchema, DataMartSummary, RelationshipGraph, ReportRunStatus, ReportSummary, Row,
-  SheetsDestination, SpreadsheetRef, Totals,
+  SheetsDestination, SpreadsheetRef, StorageSummary, Totals,
 } from './odm-types';
 import { ROW_CAP, type ReportConfig, type TraverseOptions } from './read-plan';
 
@@ -15,6 +15,10 @@ export interface OwoxClient {
   dataMarts: {
     list(): Promise<DataMartSummary[]>;
     traverseData(dataMartId: string, options: TraverseOptions): Promise<Traversal>;
+  };
+  storages: { list(): Promise<StorageSummary[]> };
+  models: {
+    getDataMarts(storageId: string, offset?: number): Promise<{ items: { id: string }[]; total: number; nextOffset: number | null }>;
   };
   getJson<T>(path: string, query?: Record<string, string>): Promise<T>;
   postJson<T>(path: string, body: unknown): Promise<T>;
@@ -108,6 +112,26 @@ export function createOdmApi(owox: OwoxClient) {
         all = await listDataMartsLeniently(owox);
       }
       return all.sort((a, b) => a.title.localeCompare(b.title));
+    },
+
+    async listStorages(): Promise<StorageSummary[]> {
+      return (await owox.storages.list()).map(({ id, title, type }) => ({ id, title, type }));
+    },
+
+    /** Ids of every data mart in a storage, from the model canvas; relationships never cross storages. */
+    async listStorageMartIds(storageId: string): Promise<string[]> {
+      const ids: string[] = [];
+      // The first page is offset 0.
+      const seen = new Set<number>([0]);
+      let offset: number | undefined;
+      for (;;) {
+        const page = await owox.models.getDataMarts(storageId, offset);
+        ids.push(...page.items.map((item) => item.id));
+        if (page.nextOffset === null) return ids;
+        if (seen.has(page.nextOffset)) throw new Error(`OWOX model canvas API returned repeated nextOffset ${page.nextOffset}`);
+        seen.add(page.nextOffset);
+        offset = page.nextOffset;
+      }
     },
 
     getBlendableSchema: (dataMartId: string) =>

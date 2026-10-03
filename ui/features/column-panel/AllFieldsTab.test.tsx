@@ -5,7 +5,7 @@ import { DATA_MARTS, DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/sm
 import { buildSchemaIndex } from '../../lib/schema-index';
 import type { AggregateFunction, DateTruncUnit } from '../../lib/odm-types';
 import {
-  addColumn, changeInstancePath, emptyDraft, includePath, removeColumn, removeFilter, setAggregations, setDateTrunc,
+  addColumn, changeInstancePath, emptyDraft, removeColumn, removeFilter, setAggregations, setDateTrunc,
   upsertFilter, type DraftFilter, type ReportDraft,
 } from '../../lib/report-draft';
 import { renderUi } from '../../test/render';
@@ -18,6 +18,7 @@ interface Spies {
   onSetDateTrunc?: (column: string, unit: DateTruncUnit | undefined) => void;
   onUpsertFilter?: (filter: DraftFilter) => void;
   onRemoveFilter?: (id: string) => void;
+  onChangeInstancePath?: (from: string, to: string) => void;
 }
 
 function Harness({ initial = emptyDraft(DM.visitor), spies = {} }: { initial?: ReportDraft; spies?: Spies }) {
@@ -30,8 +31,10 @@ function Harness({ initial = emptyDraft(DM.visitor), spies = {} }: { initial?: R
         draft={draft}
         marts={DATA_MARTS}
         onToggleField={(name, checked) => setDraft((d) => (checked ? addColumn(d, index, name).draft : removeColumn(d, name)))}
-        onIncludePath={(path) => setDraft((d) => includePath(d, path))}
-        onChangeInstancePath={(from, to) => setDraft((d) => changeInstancePath(d, index, from, to).draft)}
+        onChangeInstancePath={(from, to) => {
+          spies.onChangeInstancePath?.(from, to);
+          setDraft((d) => changeInstancePath(d, index, from, to).draft);
+        }}
         onSetAggregations={(column, fns) => {
           spies.onSetAggregations?.(column, fns);
           setDraft((d) => setAggregations(d, column, fns));
@@ -66,32 +69,81 @@ it('adds a main-mart column directly', async () => {
   expect(columns()).toBe('email');
 });
 
-it('asks for the join path when a data mart is reachable in more than one way', async () => {
+const groupHeader = (label: string) => screen.getByRole('button', { name: label });
+const nodesOf = (card: HTMLElement) => [...card.querySelectorAll('[data-slot="join-path-node"]')].map((n) => n.textContent);
+const joinPathCard = async () => (await screen.findByRole('list', { name: 'Join path' }, { timeout: 2000 })).closest<HTMLElement>('[data-slot="hover-card-content"]')!;
+
+it('lists joined data marts by output alias, with the data mart title next to an alias', async () => {
   renderUi(<Harness />);
-  await userEvent.click(screen.getByRole('button', { name: 'Page' }));
+  const headers = [...document.querySelectorAll('[data-slot="alias-group-trigger"]')].map((b) => b.getAttribute('aria-label'));
+  expect(headers).toEqual([
+    'Visitor', 'Contact', 'Contact First Session · Session', 'Landing page · Page', 'Page', 'Pageview', 'Session', 'User',
+  ]);
+  expect(groupHeader('Contact First Session · Session')).toHaveTextContent('Contact First Session · Session');
+  expect(groupHeader('Session')).not.toHaveTextContent('·');
+
+  await userEvent.click(groupHeader('Contact First Session · Session'));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Contact First Session)' }));
+  await userEvent.click(groupHeader('Page'));
   await userEvent.click(screen.getByRole('checkbox', { name: 'Title (Page)' }));
-  const dialog = await screen.findByRole('dialog');
-  expect(within(dialog).getByText('Visitor → Landing page')).toBeInTheDocument();
-  expect(within(dialog).getByText('Visitor → Session → Pageview → Page')).toBeInTheDocument();
-  expect(within(dialog).getByText('Landing page: The first page the visitor landed on.')).toBeInTheDocument();
-  expect(within(dialog).queryByText(/multipl|×N/i)).not.toBeInTheDocument();
-  await userEvent.click(within(dialog).getByRole('radio', { name: 'Visitor → Landing page' }));
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Use this path' }));
-  expect(columns()).toBe('landing_page__title');
-  expect(screen.getByRole('button', { name: 'via Landing page' })).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(columns()).toBe('contact_first_session__source,sessions_pageviews_page__title');
+  expect(screen.queryByRole('group', { name: /join paths/ })).not.toBeInTheDocument();
 });
 
-it('lets the same data mart join through a second path at once', async () => {
+it('switches the join path of a group that has nothing selected', async () => {
+  const onChangeInstancePath = vi.fn();
+  renderUi(<Harness spies={{ onChangeInstancePath }} />);
+  await userEvent.click(groupHeader('Session'));
+  const paths = screen.getByRole('group', { name: '2 join paths' });
+  expect(within(paths).getAllByRole('radio')).toHaveLength(2);
+  expect(within(paths).getByRole('radio', { name: 'via Session' })).toBeChecked();
+
+  await userEvent.click(within(paths).getByRole('radio', { name: 'via Contact › Session' }));
+  expect(within(paths).getByRole('radio', { name: 'via Contact › Session' })).toBeChecked();
+  expect(onChangeInstancePath).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  expect(columns()).toBe('contact_sessions__source');
+});
+
+it('moves the selected fields when another join path is chosen', async () => {
+  const onChangeInstancePath = vi.fn();
+  const initial = { ...emptyDraft(DM.visitor), columns: [{ name: 'sessions__source', aliasPath: 'sessions' }] };
+  renderUi(<Harness initial={initial} spies={{ onChangeInstancePath }} />);
+  expect(groupHeader('Session')).toHaveAccessibleDescription('1 selected');
+  await userEvent.click(screen.getByRole('radio', { name: 'via Contact › Session' }));
+  expect(onChangeInstancePath).toHaveBeenCalledWith('sessions', 'contact.sessions');
+  expect(columns()).toBe('contact_sessions__source');
+  expect(screen.getByRole('radio', { name: 'via Contact › Session' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Source (Session)' })).toBeChecked();
+  expect(screen.queryByRole('button', { name: '+ via another path' })).not.toBeInTheDocument();
+});
+
+it('keeps the moved-to join path after its selections are removed', async () => {
+  // No automatic date ranges, so removing the column leaves the path without selections.
+  renderUi(<Harness initial={{ ...emptyDraft(DM.visitor), dateRangeOptOut: ['sessions', 'contact.sessions'] }} />);
+  await userEvent.click(groupHeader('Session'));
+  await userEvent.click(screen.getByRole('radio', { name: 'via Contact › Session' }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  expect(columns()).toBe('contact_sessions__source');
+
+  await userEvent.click(screen.getByRole('radio', { name: 'via Session' }));
+  expect(columns()).toBe('sessions__source');
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  expect(columns()).toBe('');
+  expect(screen.getByRole('radio', { name: 'via Session' })).toBeChecked();
+});
+
+it('previews a join path when hovering a path variant', async () => {
   renderUi(<Harness />);
-  await userEvent.click(screen.getByRole('button', { name: 'Page' }));
-  await userEvent.click(screen.getByRole('checkbox', { name: 'Title (Page)' }));
-  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Use this path' }));
-  await userEvent.click(screen.getByRole('button', { name: '+ via another path' }));
-  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Use this path' }));
-  const titles = screen.getAllByRole('checkbox', { name: /^Title \(/ });
-  expect(titles).toHaveLength(2);
-  await userEvent.click(titles[1]!);
-  expect(columns()).toBe('landing_page__title,sessions_pageviews_page__title');
+  await userEvent.click(groupHeader('Session'));
+  await userEvent.hover(screen.getByRole('radio', { name: 'via Contact › Session' }).closest('label')!);
+  const card = await joinPathCard();
+  expect(within(card).getByText('Join path', { selector: 'p' })).toBeInTheDocument();
+  expect(nodesOf(card)).toEqual(['Visitor', 'Contact', 'Session']);
+  expect(within(card).getByText('contact_id = id')).toBeInTheDocument();
+  expect(within(card).getByText('contact_id = contact_id')).toBeInTheDocument();
+  expect(within(card).getByText('Sessions of the contact on any device.')).toBeInTheDocument();
 });
 
 it('searches across all reachable data marts', async () => {
@@ -316,17 +368,27 @@ it('counts the selected fields of each data mart', async () => {
   expect(session).toHaveAccessibleDescription('1 selected');
 });
 
-it('previews the join path when hovering the path chip', async () => {
+it('previews the join path as a stepper when hovering the path of a single-path group', async () => {
   const initial = { ...emptyDraft(DM.visitor), columns: [{ name: 'sessions_pageviews_page__title', aliasPath: 'sessions.pageviews.page' }] };
   renderUi(<Harness initial={initial} />);
-  await userEvent.hover(screen.getByRole('button', { name: 'via Session › Pageview › Page' }));
-  const tooltip = await screen.findByRole('tooltip', {}, { timeout: 2000 });
+  await userEvent.hover(screen.getByText('via Session › Pageview › Page'));
+  const card = await joinPathCard();
 
-  expect([...tooltip.querySelectorAll('[data-slot="join-path-node"]')].map((n) => n.textContent)).toEqual(['Visitor', 'Session', 'Pageview', 'Page']);
-  expect(within(tooltip).getByText('session_id = session_id')).toBeInTheDocument();
-  expect(within(tooltip).getByText('page_id = id')).toBeInTheDocument();
-  expect(within(tooltip).queryByText(/×N|\?/)).not.toBeInTheDocument();
-  expect(within(tooltip).getByText('Session: Sessions of the visitor.')).toBeInTheDocument();
-  expect(within(tooltip).getByText('Pageview: Pages viewed in the session.')).toBeInTheDocument();
-  expect(within(tooltip).getByText('Page: The page that was viewed.')).toBeInTheDocument();
+  expect(nodesOf(card)).toEqual(['Visitor', 'Session', 'Pageview', 'Page']);
+  expect(within(card).getByText('session_id = session_id')).toBeInTheDocument();
+  expect(within(card).getByText('page_id = id')).toBeInTheDocument();
+  expect(within(card).queryByText(/×N|\?/)).not.toBeInTheDocument();
+  expect(within(card).getByText('Sessions of the visitor.')).toBeInTheDocument();
+  expect(within(card).getByText('Pages viewed in the session.')).toBeInTheDocument();
+  expect(within(card).getByText('The page that was viewed.')).toBeInTheDocument();
+});
+
+it('says when a join has no description', async () => {
+  const initial = { ...emptyDraft(DM.visitor), columns: [{ name: 'contact_first_session__source', aliasPath: 'contact.first_session' }] };
+  renderUi(<Harness initial={initial} />);
+  act(() => screen.getByText('via Contact › Contact First Session').focus());
+  const card = await joinPathCard();
+  expect(nodesOf(card)).toEqual(['Visitor', 'Contact', 'Contact First Session']);
+  expect(within(card).getByText('first_session_id = session_id')).toBeInTheDocument();
+  expect(within(card).getByText('No description.')).toBeInTheDocument();
 });

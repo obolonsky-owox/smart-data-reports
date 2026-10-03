@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Columns3, Loader2, RefreshCw, Save, Sheet } from 'lucide-react';
+import { ArrowLeft, Columns3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, Save, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -12,6 +12,7 @@ import { Sheet as SidePanel, SheetContent, SheetHeader, SheetTitle } from '@owox
 import { Skeleton } from '@owox/ui/components/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@owox/ui/components/tabs';
 import { useServices } from '../../services';
+import { DataMartPicker } from '../../components/DataMartPicker';
 import { NativeSelect } from '../../components/NativeSelect';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import type { DataMartSummary } from '../../lib/odm-types';
@@ -22,6 +23,7 @@ import {
   setSort, upsertFilter, type DateChoice, type RemapResult, type ReportDraft,
 } from '../../lib/report-draft';
 import { configHash } from '../../lib/report-store';
+import { groupByStorage, loadStorageMembership, type StorageCatalog, type StorageMembership } from '../../lib/storages';
 import type { SchemaIndex } from '../../lib/schema-index';
 import { ColumnPanel } from '../column-panel/ColumnPanel';
 import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
@@ -29,6 +31,7 @@ import { ResultTable } from '../data-table/ResultTable';
 import { RelationshipCanvas } from '../canvas/RelationshipCanvas';
 import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
 import { SqlTab } from '../sql/SqlTab';
+import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
 import { useQueryRun } from './use-query-run';
 import { useReportDocument, type SaveOutcome } from './use-report-document';
 import { useSchema } from './use-schema';
@@ -57,13 +60,22 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const doc = useReportDocument(reportId);
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
   const [martsError, setMartsError] = useState<UserFacingError | null>(null);
+  /** undefined while loading; null when storages couldn't be loaded, which falls back to one flat list. */
+  const [membership, setMembership] = useState<StorageMembership | null | undefined>(undefined);
+  const [startStorageId, setStartStorageId] = useState('');
   const [startId, setStartId] = useState('');
   const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
   const [pendingRemap, setPendingRemap] = useState<PendingRemap | null>(null);
+  /** The control that started the change being confirmed; the confirmation hands the focus back to it. */
+  const remapOrigin = useRef<HTMLElement | null>(null);
   const [filterRequest, setFilterRequest] = useState<{ field: string; nonce: number } | null>(null);
   const [sheets, setSheets] = useState<'create' | 'update' | null>(null);
   const [tab, setTab] = useState('table');
+  /** The side sheet on narrow screens. */
   const [panelOpen, setPanelOpen] = useState(false);
+  /** The column panel beside the report on wide screens. */
+  const [panelHidden, setPanelHidden] = useState(false);
+  const panelWidth = usePanelWidth();
   const [guarded, setGuarded] = useState<GuardedAction | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmBack, setConfirmBack] = useState(false);
@@ -83,30 +95,43 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   useEffect(() => {
     let alive = true;
     api.listDataMarts().then(
-      (list) => {
-        if (!alive) return;
-        setMarts(list);
-        setStartId((current) => current || list[0]?.id || '');
-      },
+      (list) => alive && setMarts(list),
       (error) => alive && setMartsError(describeError(error, 'data marts')),
+    );
+    loadStorageMembership(api).then(
+      (loaded) => alive && setMembership(loaded),
+      () => alive && setMembership(null),
     );
     return () => {
       alive = false;
     };
   }, [api]);
 
+  const catalog = useMemo((): StorageCatalog | null => {
+    if (!marts || !membership) return null;
+    const grouped = groupByStorage(membership.storages, membership.martIdsByStorage, marts);
+    // Never hide a data mart: unless every reportable one has a storage, keep the flat list.
+    return grouped.groups.length > 0 && grouped.unassigned.length === 0 ? grouped : null;
+  }, [marts, membership]);
+
   const draft = doc.draft;
   const mainMart = useMemo(() => marts?.find((m) => m.id === draft?.mainDataMartId), [marts, draft?.mainDataMartId]);
   const schema = useSchema(api, mainMart);
   const query = useQueryRun(api);
   // Right after the main data mart changes, the loaded schema can still be the old one's.
-  const index: SchemaIndex | null =
-    schema.state.status === 'ready' && schema.state.index.mainDataMartId === draft?.mainDataMartId ? schema.state.index : null;
+  const loaded = schema.state.status === 'ready' && schema.state.index.mainDataMartId === draft?.mainDataMartId ? schema.state : null;
+  const index: SchemaIndex | null = loaded?.index ?? null;
 
   // A result (or a running query) belongs to the main data mart it was applied on.
   const mainDataMartId = draft?.mainDataMartId;
   const resetQuery = query.reset;
   useLayoutEffect(() => resetQuery(), [mainDataMartId, resetQuery]);
+  // So does a filter request from the table: the new data mart may not have that field.
+  const [filterRequestMain, setFilterRequestMain] = useState(mainDataMartId);
+  if (filterRequestMain !== mainDataMartId) {
+    setFilterRequestMain(mainDataMartId);
+    setFilterRequest(null);
+  }
 
   const edit = useCallback(
     (fn: (d: ReportDraft, i: SchemaIndex) => ReportDraft) => {
@@ -134,14 +159,20 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     if (result.dateChoice) setDateChoice(result.dateChoice);
   }
 
-  async function changeMain(dataMartId: string) {
+  /** `origin` defaults to the focused control; a popover's trigger only gets the focus back after a tick. */
+  function confirmRemap(remap: PendingRemap, origin?: HTMLElement | null) {
+    remapOrigin.current = origin ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setPendingRemap(remap);
+  }
+
+  async function changeMain(dataMartId: string, origin?: HTMLElement | null) {
     if (!draft || !index || dataMartId === draft.mainDataMartId) return;
     const mart = marts?.find((m) => m.id === dataMartId);
     if (!mart) return;
     try {
       const loaded = await schema.load(mart);
       const result = rebaseOnMain(draft, index, loaded.index);
-      if (result.dropped.length) setPendingRemap({ title: `Report on ${mart.title}?`, result, labels: labelsOf(result.dropped, index) });
+      if (result.dropped.length) confirmRemap({ title: `Report on ${mart.title}?`, result, labels: labelsOf(result.dropped, index) }, origin);
       else doc.setDraft(result.draft);
     } catch (error) {
       toast.error(describeError(error, mart.title).message);
@@ -151,7 +182,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   function changePath(from: string, to: string) {
     if (!draft || !index) return;
     const result = changeInstancePath(draft, index, from, to);
-    if (result.dropped.length) setPendingRemap({ title: 'Change the join path?', result, labels: labelsOf(result.dropped, index) });
+    if (result.dropped.length) confirmRemap({ title: 'Change the join path?', result, labels: labelsOf(result.dropped, index) });
     else doc.setDraft(result.draft);
   }
 
@@ -214,7 +245,14 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   const openSheets = () => guard(linked ? 'update' : 'create');
 
-  const header = (
+  const panelShown = narrow ? panelOpen : !panelHidden;
+  function togglePanel() {
+    if (narrow) setPanelOpen((open) => !open);
+    else setPanelHidden((hidden) => !hidden);
+  }
+
+  /** `editing` adds the report's actions; only the editor layout has them. */
+  const header = (editing = false) => (
     <header className='dm-page-header flex flex-wrap items-center justify-between gap-2'>
       <div className='flex min-w-0 items-center gap-2'>
         <Button variant='ghost' size='icon' onClick={() => (doc.dirty ? setConfirmBack(true) : onBack())} aria-label='Back to reports'>
@@ -226,22 +264,20 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
           <h1 className='dm-page-header-title'>New report</h1>
         )}
       </div>
-      {draft && index && (
+      {editing && draft && (
         <div className='flex items-center gap-2'>
-          <Button variant='outline' disabled={!draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
+          <Button variant='outline' disabled={!index || !draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
             <Sheet className='h-4 w-4' />
             {linked ? 'Update Google Sheets' : 'Create Google Sheets report'}
           </Button>
           {doc.dirty && <span role='status' aria-label='Unsaved changes' className='size-2 rounded-full bg-primary' />}
-          <Button disabled={!doc.dirty || saving} onClick={() => guard('save')}>
+          <Button disabled={!index || !doc.dirty || saving} onClick={() => guard('save')}>
             {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className='h-4 w-4' />}
             {linked ? 'Save and update Google Sheets' : 'Save'}
           </Button>
-          {narrow && (
-            <Button variant='outline' size='icon' aria-label='Columns' onClick={() => setPanelOpen(true)}>
-              <Columns3 className='h-4 w-4' />
-            </Button>
-          )}
+          <Button variant='ghost' size='icon' aria-label={panelShown ? 'Hide column panel' : 'Show column panel'} onClick={togglePanel}>
+            {panelShown ? <PanelRightClose className='h-4 w-4' /> : <PanelRightOpen className='h-4 w-4' />}
+          </Button>
         </div>
       )}
       <AlertDialog open={confirmBack} onOpenChange={setConfirmBack}>
@@ -262,10 +298,10 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     </header>
   );
 
-  if (doc.status === 'loading' || (!marts && !martsError)) {
+  if (doc.status === 'loading' || (!martsError && (!marts || membership === undefined))) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content flex flex-col gap-2'>
           <Skeleton className='h-10 w-full' />
           <Skeleton className='h-64 w-full' />
@@ -278,7 +314,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (fatal) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>{fatal.message}</AlertTitle>
@@ -304,27 +340,63 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     );
   }
 
+  // The start choice: a storage (when known), then one of its reportable data marts.
+  const startGroup = catalog?.groups.find((g) => g.storage.id === startStorageId) ?? catalog?.groups[0];
+  const startMarts = startGroup?.marts ?? marts ?? [];
+  const startMartId = startMarts.some((m) => m.id === startId) ? startId : (startMarts[0]?.id ?? '');
+  const startPicker = (action: string, variant: 'default' | 'outline') => (
+    <div className='flex w-full max-w-sm flex-col gap-1 text-left'>
+      {catalog && startGroup && (
+        <>
+          <label htmlFor='start-storage' className='text-xs text-muted-foreground'>
+            Storage
+          </label>
+          <NativeSelect
+            id='start-storage'
+            aria-label='Storage'
+            className='mb-2'
+            value={startGroup.storage.id}
+            onChange={(e) => {
+              setStartStorageId(e.target.value);
+              setStartId('');
+            }}
+          >
+            {catalog.groups.map((g) => (
+              <option key={g.storage.id} value={g.storage.id}>
+                {g.storage.title}
+              </option>
+            ))}
+          </NativeSelect>
+        </>
+      )}
+      <span className='text-xs text-muted-foreground'>Data mart</span>
+      <div className='flex min-w-0 items-center gap-2'>
+        <DataMartPicker label='Data mart' marts={startMarts} value={startMartId} onChange={setStartId} />
+        <Button variant={variant} disabled={!startMartId} onClick={() => doc.setDraft(emptyDraft(startMartId))}>
+          {action}
+        </Button>
+      </div>
+    </div>
+  );
+
   if (!draft) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
-        <div className='dm-empty-state'>
-          <Columns3 className='dm-empty-state-ico' />
-          <h2 className='dm-empty-state-title'>Choose the data mart your report is about</h2>
-          <p className='dm-empty-state-subtitle'>Each row of the report is one row of this data mart. You can add columns from its joinable data marts next.</p>
-          <div className='flex w-full max-w-sm items-center gap-2'>
-            <NativeSelect aria-label='Data mart' value={startId} onChange={(e) => setStartId(e.target.value)}>
-              {marts!.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.title}
-                </option>
-              ))}
-            </NativeSelect>
-            <Button disabled={!startId} onClick={() => doc.setDraft(emptyDraft(startId))}>
-              Start
-            </Button>
+        {header()}
+        {startMarts.length === 0 ? (
+          <div className='dm-empty-state'>
+            <Columns3 className='dm-empty-state-ico' />
+            <h2 className='dm-empty-state-title'>No published data marts available for reports</h2>
+            <p className='dm-empty-state-subtitle'>Publish a data mart and make it available for reports in OWOX Data Marts, then come back.</p>
           </div>
-        </div>
+        ) : (
+          <div className='dm-empty-state'>
+            <Columns3 className='dm-empty-state-ico' />
+            <h2 className='dm-empty-state-title'>Choose the data mart your report is about</h2>
+            <p className='dm-empty-state-subtitle'>Each row of the report is one row of this data mart. You can add columns from its joinable data marts next.</p>
+            {startPicker('Start', 'default')}
+          </div>
+        )}
       </div>
     );
   }
@@ -332,24 +404,13 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (!mainMart) {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>This report's data mart is no longer available for reports.</AlertTitle>
             <AlertDescription>
               <p>It may have been unpublished or hidden from reports. Pick another data mart to start this report again — its columns can't be carried over.</p>
-              <div className='mt-2 flex w-full max-w-sm items-center gap-2'>
-                <NativeSelect aria-label='Data mart' value={startId} onChange={(e) => setStartId(e.target.value)}>
-                  {marts!.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title}
-                    </option>
-                  ))}
-                </NativeSelect>
-                <Button variant='outline' disabled={!startId} onClick={() => doc.setDraft(emptyDraft(startId))}>
-                  Use this data mart
-                </Button>
-              </div>
+              <div className='mt-2'>{startPicker('Use this data mart', 'outline')}</div>
             </AlertDescription>
           </Alert>
         </div>
@@ -360,7 +421,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (schema.state.status === 'error') {
     return (
       <div className='dm-page' data-testid='editorPage'>
-        {header}
+        {header()}
         <div className='dm-page-content'>
           <Alert variant='destructive'>
             <AlertTitle>Couldn't load {mainMart?.title ?? 'this data mart'}</AlertTitle>
@@ -377,24 +438,21 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     );
   }
 
-  if (!index || schema.state.status !== 'ready') {
-    return (
-      <div className='dm-page' data-testid='editorPage'>
-        {header}
-        <div className='dm-page-content'>
-          <Skeleton className='h-64 w-full' />
-        </div>
-      </div>
-    );
-  }
-
-  const graph = schema.state.graph;
-  const noFields = index.instances.size === 1 && index.instances.get('')!.fields.length === 0;
-  const visibleIssues = issues.filter((i) => i.kind !== 'no-columns').map((i) => describeIssue(i, index));
+  // While the schema loads, the layout and the column panel stay mounted: only their contents wait.
+  const graph = loaded?.graph ?? null;
+  const noFields = !!index && index.instances.size === 1 && index.instances.get('')!.fields.length === 0;
+  const visibleIssues = index ? issues.filter((i) => i.kind !== 'no-columns').map((i) => describeIssue(i, index)) : [];
   const requestFilter = (field: string) => {
     setFilterRequest({ field, nonce: Date.now() });
-    // On wide screens the panel is already visible; the side sheet is only for narrow ones.
     if (narrow) setPanelOpen(true);
+    else setPanelHidden(false);
+  };
+
+  // The sidebar offers the main data mart's storage; nothing is reachable across storages.
+  const mainGroup = catalog?.groups.find((g) => g.storage.id === catalog.storageOf(draft.mainDataMartId));
+  const changeStorage = (storageId: string) => {
+    const first = catalog?.groups.find((g) => g.storage.id === storageId)?.marts[0];
+    if (first) void changeMain(first.id);
   };
 
   const panel = (
@@ -402,10 +460,12 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       index={index}
       graph={graph}
       draft={draft}
-      marts={marts!}
+      marts={mainGroup?.marts ?? marts!}
+      storages={mainGroup ? catalog!.groups.map((g) => g.storage) : null}
+      storageId={mainGroup?.storage.id}
+      onChangeStorage={changeStorage}
       filterRequest={filterRequest}
       onToggleField={toggleField}
-      onIncludePath={(path) => edit((d) => includePath(d, path))}
       onChangeInstancePath={changePath}
       onSetAggregations={(column, fns) => edit((d) => setAggregations(d, column, fns))}
       onSetDateTrunc={(column, unit) => edit((d) => setDateTrunc(d, column, unit))}
@@ -416,9 +476,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onMoveColumn={(from, to) => edit((d) => moveColumn(d, from, to))}
       onRemoveColumn={(name) => edit((d) => removeColumn(d, name))}
       onPendingFilterDone={() => setFilterRequest(null)}
-      onChangeMain={(id) => void changeMain(id)}
+      onChangeMain={(id, origin) => void changeMain(id, origin)}
       onApply={apply}
-      applyDisabled={issues.length > 0 || (query.state.status === 'success' && !stale)}
+      applyDisabled={!index || issues.length > 0 || (query.state.status === 'success' && !stale)}
       applying={query.state.status === 'running'}
       issues={visibleIssues}
     />
@@ -426,10 +486,12 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   return (
     <div className='dm-page flex h-full flex-col' data-testid='editorPage'>
-      {header}
+      {header(true)}
       <div className='flex min-h-0 flex-1'>
         <main className='dm-page-content min-w-0 flex-1 overflow-auto'>
-          {noFields ? (
+          {!index || !graph ? (
+            <Skeleton className='h-64 w-full' />
+          ) : noFields ? (
             <div className='dm-empty-state'>
               <h2 className='dm-empty-state-title'>This data mart has no fields available for reports</h2>
               <p className='dm-empty-state-subtitle'>Ask its owner to make fields visible for reporting, or pick another data mart.</p>
@@ -481,7 +543,15 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
             </Tabs>
           )}
         </main>
-        {!narrow && <aside className='flex w-[380px] shrink-0 border-l border-border'>{panel}</aside>}
+        {!narrow && !panelHidden && (
+          <>
+            <PanelResizeHandle width={panelWidth.width} min={panelWidth.min} max={panelWidth.max} onResize={panelWidth.setWidth} />
+            {/* The width is the user's drag result, so it is the one inline style here. */}
+            <aside className='flex min-w-0 shrink-0' style={{ width: panelWidth.width }}>
+              {panel}
+            </aside>
+          </>
+        )}
       </div>
 
       {narrow && (
@@ -495,7 +565,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
         </SidePanel>
       )}
 
-      {dateChoice && (
+      {dateChoice && index && (
         <DateChoiceDialog
           choice={dateChoice}
           index={index}
@@ -507,7 +577,16 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       )}
 
       <AlertDialog open={!!pendingRemap} onOpenChange={(open) => !open && setPendingRemap(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            // Opened from code, the dialog has no trigger to return to and would leave the focus on the page.
+            const origin = remapOrigin.current;
+            remapOrigin.current = null;
+            if (!origin?.isConnected) return;
+            event.preventDefault();
+            origin.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{pendingRemap?.title}</AlertDialogTitle>
             <AlertDialogDescription>These can't be kept and will be removed: {pendingRemap?.labels.join(', ')}.</AlertDialogDescription>
