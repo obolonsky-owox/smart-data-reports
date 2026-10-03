@@ -68,8 +68,10 @@ export function spreadsheetUrl(linked: Pick<LinkedReport, 'spreadsheetId' | 'she
   return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(linked.spreadsheetId)}/edit#gid=${linked.sheetId}`;
 }
 
-export function odmReportsPath(projectId: string, dataMartId: string): string {
-  return `/ui/${encodeURIComponent(projectId)}/data-marts/${encodeURIComponent(dataMartId)}/reports`;
+/** The data mart's Destinations tab; with `reportId`, ODM opens that report's sheet, like its own "Copy link". */
+export function odmReportsPath(projectId: string, dataMartId: string, reportId?: string): string {
+  const path = `/ui/${encodeURIComponent(projectId)}/data-marts/${encodeURIComponent(dataMartId)}/reports`;
+  return reportId ? `${path}?reportId=${encodeURIComponent(reportId)}` : path;
 }
 
 export function odmDestinationsPath(projectId: string): string {

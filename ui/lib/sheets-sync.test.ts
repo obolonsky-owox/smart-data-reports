@@ -58,4 +58,5 @@ it('reports a deleted ODM report as missing', async () => {
 it('builds links into Google Sheets and ODM', () => {
   expect(spreadsheetUrl({ spreadsheetId: 'abc', sheetId: 7 })).toBe('https://docs.google.com/spreadsheets/d/abc/edit#gid=7');
   expect(odmReportsPath('p1', DM.visitor)).toBe(`/ui/p1/data-marts/${DM.visitor}/reports`);
+  expect(odmReportsPath('p1', DM.visitor, 'r 1')).toBe(`/ui/p1/data-marts/${DM.visitor}/reports?reportId=r%201`);
 });
