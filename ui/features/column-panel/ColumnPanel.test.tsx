@@ -96,3 +96,13 @@ it('ignores a filter request for a field the data mart lacks', async () => {
   await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^Client ID/ }));
   expect(screen.getByRole('form', { name: 'Filter Client ID' })).toBeInTheDocument();
 });
+
+it('switches to All and reveals the data mart added on the canvas', () => {
+  Element.prototype.scrollIntoView = vi.fn();
+  const props = setup({ filterRequest: { field: 'email', nonce: 1 } });
+  expect(screen.getByRole('tab', { name: /Selected/ })).toHaveAttribute('aria-selected', 'true');
+  props.rerender({ filterRequest: null, focusRequest: { path: 'sessions', nonce: 2 } });
+  expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
+  const header = screen.getByRole('button', { name: 'Session' }).parentElement!;
+  expect(header.querySelector('[data-slot="focus-hint"]')).not.toBeNull();
+});

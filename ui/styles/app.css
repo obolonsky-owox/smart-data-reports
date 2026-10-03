@@ -5,3 +5,32 @@ body,
 #root {
   height: 100%;
 }
+
+/* A data mart just added on the canvas: three rings around its group in the column panel, then
+   nothing. The same rings as the Storage hint in the Import Model plugin. The inner ring carries
+   the color, the outer one blooms and fades. */
+.dm-focus-hint {
+  animation: dm-focus-hint 1.4s ease-out 0.3s 3 both;
+}
+@keyframes dm-focus-hint {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent),
+      0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+  25% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklch, var(--primary) 85%, transparent),
+      0 0 0 7px color-mix(in oklch, var(--primary) 28%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklch, var(--primary) 0%, transparent),
+      0 0 0 16px color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dm-focus-hint {
+    animation: none;
+  }
+}

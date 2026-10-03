@@ -24,7 +24,7 @@ import {
 } from '../../lib/report-draft';
 import { configHash } from '../../lib/report-store';
 import { groupByStorage, loadStorageMembership, type StorageCatalog, type StorageMembership } from '../../lib/storages';
-import type { SchemaIndex } from '../../lib/schema-index';
+import type { AliasPath, SchemaIndex } from '../../lib/schema-index';
 import { ColumnPanel } from '../column-panel/ColumnPanel';
 import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
 import { ResultTable } from '../data-table/ResultTable';
@@ -69,6 +69,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   /** The control that started the change being confirmed; the confirmation hands the focus back to it. */
   const remapOrigin = useRef<HTMLElement | null>(null);
   const [filterRequest, setFilterRequest] = useState<{ field: string; nonce: number } | null>(null);
+  /** A data mart added on the canvas, to reveal in the column panel. */
+  const [focusRequest, setFocusRequest] = useState<{ path: AliasPath; nonce: number } | null>(null);
   const [sheets, setSheets] = useState<'create' | 'update' | null>(null);
   const [tab, setTab] = useState('table');
   /** The side sheet on narrow screens. */
@@ -131,6 +133,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   if (filterRequestMain !== mainDataMartId) {
     setFilterRequestMain(mainDataMartId);
     setFilterRequest(null);
+    setFocusRequest(null);
   }
 
   const edit = useCallback(
@@ -247,6 +250,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   const panelShown = narrow ? panelOpen : !panelHidden;
   function togglePanel() {
+    // A reopened panel mounts afresh; it must not reveal the last added data mart again.
+    setFocusRequest(null);
     if (narrow) setPanelOpen((open) => !open);
     else setPanelHidden((hidden) => !hidden);
   }
@@ -442,10 +447,21 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const graph = loaded?.graph ?? null;
   const noFields = !!index && index.instances.size === 1 && index.instances.get('')!.fields.length === 0;
   const visibleIssues = index ? issues.filter((i) => i.kind !== 'no-columns').map((i) => describeIssue(i, index)) : [];
-  const requestFilter = (field: string) => {
-    setFilterRequest({ field, nonce: Date.now() });
+  const showPanel = () => {
     if (narrow) setPanelOpen(true);
     else setPanelHidden(false);
+  };
+  // The latest request wins: the filter editor lives in Selected, the added data mart in All.
+  const requestFilter = (field: string) => {
+    setFocusRequest(null);
+    setFilterRequest({ field, nonce: Date.now() });
+    showPanel();
+  };
+  const addObject = (path: AliasPath) => {
+    edit((d) => includePath(d, path));
+    setFilterRequest(null);
+    setFocusRequest({ path, nonce: Date.now() });
+    showPanel();
   };
 
   // The sidebar offers the main data mart's storage; nothing is reachable across storages.
@@ -465,6 +481,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       storageId={mainGroup?.storage.id}
       onChangeStorage={changeStorage}
       filterRequest={filterRequest}
+      focusRequest={focusRequest}
       onToggleField={toggleField}
       onChangeInstancePath={changePath}
       onSetAggregations={(column, fns) => edit((d) => setAggregations(d, column, fns))}
@@ -500,7 +517,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className={UNDERLINE_LIST}>
                 <TabsTrigger value='table' className={UNDERLINE_TRIGGER}>Data table</TabsTrigger>
-                <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Entity relationship</TabsTrigger>
+                <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Data Marts Relationships</TabsTrigger>
                 <TabsTrigger value='sql' className={UNDERLINE_TRIGGER}>SQL</TabsTrigger>
               </TabsList>
               <TabsContent value='table'>
@@ -526,7 +543,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   graph={graph}
                   draft={draft}
                   theme={theme}
-                  onAddObject={(path) => edit((d) => includePath(d, path))}
+                  onAddObject={addObject}
                   onSetMain={(id) => void changeMain(id)}
                   onDeleteInstance={(path) => edit((d) => removeInstance(d, path))}
                 />
@@ -555,7 +572,13 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       </div>
 
       {narrow && (
-        <SidePanel open={panelOpen} onOpenChange={setPanelOpen}>
+        <SidePanel
+          open={panelOpen}
+          onOpenChange={(open) => {
+            if (!open) setFocusRequest(null);
+            setPanelOpen(open);
+          }}
+        >
           <SheetContent className='w-full p-0 sm:min-w-[400px]'>
             <SheetHeader className='border-b border-border p-4'>
               <SheetTitle>Columns</SheetTitle>
