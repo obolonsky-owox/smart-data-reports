@@ -82,3 +82,23 @@ it('closes the + Date and + Filter menus after a pick', async () => {
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(screen.getByRole('form', { name: 'Filter Client ID' })).toBeInTheDocument();
 });
+
+it('marks date ranges and filters as ODM filters or slices', async () => {
+  const draft = upsertFilter(add(emptyDraft(DM.visitor), 'email', 'sessions__source'), {
+    id: 'f2',
+    column: 'sessions__source',
+    aliasPath: 'sessions',
+    operator: 'is_not_blank',
+    sliceOnly: true,
+  });
+  setup(draft);
+  const dates = screen.getByRole('region', { name: 'Date ranges' });
+  expect(within(dates).getAllByRole('button', { name: 'Filter' })).toHaveLength(1);
+  const slice = within(dates).getByRole('button', { name: 'Slice' });
+  await userEvent.hover(slice);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Slice — narrows only Session before the join');
+  await userEvent.unhover(slice);
+  const filters = screen.getByRole('region', { name: 'Filters' });
+  expect(within(filters).getByRole('button', { name: 'Slice' })).toBeInTheDocument();
+  expect(within(filters).queryByText(/only narrows/)).not.toBeInTheDocument();
+});

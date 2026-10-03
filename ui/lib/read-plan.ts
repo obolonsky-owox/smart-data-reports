@@ -1,5 +1,6 @@
 import type { AggregationRule, DateTruncRule, FilterRule, SortRule } from './odm-types';
 import { dateRangeToRule } from './date-ranges';
+import { dateRangePlacement, filterPlacement } from './placement';
 import type { DraftFilter, ReportDraft } from './report-draft';
 import type { SchemaIndex } from './schema-index';
 
@@ -48,7 +49,7 @@ export type DraftIssue =
 const VALUELESS = new Set(['is_blank', 'is_not_blank', 'is_true', 'is_false']);
 
 export function filterToRule(filter: DraftFilter): FilterRule {
-  const placement = filter.sliceOnly && filter.aliasPath !== '' ? { placement: 'pre-join' as const } : {};
+  const placement = filterPlacement(filter) === 'slice' ? { placement: 'pre-join' as const } : {};
   if (VALUELESS.has(filter.operator)) {
     return { column: filter.column, operator: filter.operator, ...placement } as FilterRule;
   }
@@ -60,7 +61,7 @@ export function toReadPlan(draft: ReportDraft, today = new Date()): ReadPlan {
     const rule = dateRangeToRule(range.column, range.range, today);
     if (!rule) return [];
     // A period on a joined mart narrows that mart only; on the main mart it bounds the report.
-    return [range.aliasPath === '' ? rule : { ...rule, placement: 'pre-join' as const }];
+    return [dateRangePlacement(range.aliasPath) === 'filter' ? rule : { ...rule, placement: 'pre-join' as const }];
   });
   return {
     column: draft.columns.map((c) => c.name),

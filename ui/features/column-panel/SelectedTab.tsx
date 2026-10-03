@@ -12,6 +12,8 @@ import { describeFilter } from '../../lib/filter-operators';
 import { dateFields, type SchemaIndex } from '../../lib/schema-index';
 import { DateRangeEditor } from './DateRangeEditor';
 import { FilterEditor } from './FilterEditor';
+import { dateRangePlacement, filterPlacement } from '../../lib/placement';
+import { PlacementMarker } from './PlacementMarker';
 import { TypeBadge } from './TypeBadge';
 
 export interface SelectedTabProps {
@@ -120,7 +122,10 @@ export function SelectedTab(props: SelectedTabProps) {
             <div className='flex flex-1 flex-col gap-1'>
               <div className='flex items-center justify-between text-sm'>
                 <span>{fieldLabel(range.column)}</span>
-                <span className='text-xs text-muted-foreground'>{martLabel(range.aliasPath)}</span>
+                <span className='flex items-center gap-1 text-xs text-muted-foreground'>
+                  {martLabel(range.aliasPath)}
+                  <PlacementMarker placement={dateRangePlacement(range.aliasPath)} kind='period' mainLabel={main.title} instanceLabel={martLabel(range.aliasPath)} />
+                </span>
               </div>
               <DateRangeEditor value={range.range} label={fieldLabel(range.column)} onChange={(value) => props.onSetDateRange(range.column, value)} />
             </div>
@@ -205,9 +210,9 @@ export function SelectedTab(props: SelectedTabProps) {
                     </span>
                     <span className='text-xs text-muted-foreground'>
                       {describeFilter(filter, index.fields.get(filter.column)?.kind)}
-                      {filter.sliceOnly && ` · only narrows ${martLabel(filter.aliasPath)}`}
                     </span>
                   </button>
+                  <PlacementMarker placement={filterPlacement(filter)} kind='filter' mainLabel={main.title} instanceLabel={martLabel(filter.aliasPath)} />
                   <Button variant='ghost' size='icon' className='size-7' aria-label={`Remove filter ${fieldLabel(filter.column)}`} onClick={() => props.onRemoveFilter(filter.id)}>
                     <X className='h-4 w-4' />
                   </Button>
