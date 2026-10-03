@@ -166,6 +166,9 @@ const VISITOR_JOINS: Join[] = [
   { aliasPath: 'sessions.pageviews', martId: DM.pageview, description: 'Pages viewed in the session.', grain: 'multiplies', keys: [['session_id', 'session_id'], ['client_id', 'client_id']] },
   { aliasPath: 'sessions.pageviews.page', martId: DM.page, description: 'The page that was viewed.', grain: 'multiplies', keys: [['page_id', 'id']] },
   { aliasPath: 'landing_page', martId: DM.page, label: 'Landing page', description: 'The first page the visitor landed on.', grain: 'none', keys: [['landing_page_id', 'id']] },
+  // Session again: once more under its default alias (a second path) and once under an Output Alias of its own.
+  { aliasPath: 'contact.sessions', martId: DM.session, description: 'Sessions of the contact on any device.', grain: 'multiplies', keys: [['contact_id', 'contact_id']] },
+  { aliasPath: 'contact.first_session', martId: DM.session, label: 'Contact First Session', description: '', grain: 'none', keys: [['first_session_id', 'session_id'], ['contact_id', 'contact_id']] },
 ];
 
 const SESSION_JOINS: Join[] = [

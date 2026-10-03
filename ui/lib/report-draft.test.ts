@@ -1,7 +1,7 @@
 import { DM, SESSION_SCHEMA, VISITOR_SCHEMA } from '../fixtures/smart-data';
 import { buildSchemaIndex } from './schema-index';
 import {
-  addColumn, changeInstancePath, chooseAutoDate, emptyDraft, moveColumn, rebaseOnMain,
+  activeVariant, addColumn, changeInstancePath, chooseAutoDate, emptyDraft, hasSelections, includePath, moveColumn, rebaseOnMain,
   removeDateRange, removeInstance, setDateRange, setSort, upsertFilter, usedInstances,
   type ReportDraft,
 } from './report-draft';
@@ -118,6 +118,38 @@ describe('changeInstancePath', () => {
     expect(next.columns).toEqual([{ name: 'sessions_pageviews_page__title', aliasPath: 'sessions.pageviews.page' }]);
     expect(next.dateRanges.map((r) => r.column)).toEqual(['sessions_pageviews_page__creation_date']);
     expect(next.includedPaths).toEqual(['sessions', 'sessions.pageviews', 'sessions.pageviews.page']);
+  });
+});
+
+describe('activeVariant', () => {
+  const group = visitor.groups.find((g) => g.label === 'Session')!;
+  const active = (draft: ReportDraft, chosen?: string) => activeVariant(group, draft, chosen).aliasPath;
+
+  it('is the first instance by depth when nothing is selected or chosen', () => {
+    expect(active(emptyDraft(DM.visitor))).toBe('sessions');
+  });
+
+  it('follows the instance that holds columns, date ranges or filters over a local choice', () => {
+    expect(active(add(emptyDraft(DM.visitor), 'contact_sessions__source'), 'sessions')).toBe('contact.sessions');
+    const ranged = setDateRange(emptyDraft(DM.visitor), visitor, 'contact_sessions__date', { kind: 'preset', preset: 'last_7_days' });
+    expect(active({ ...ranged, includedPaths: [] })).toBe('contact.sessions');
+    const filtered = upsertFilter(emptyDraft(DM.visitor), {
+      id: 'f', column: 'contact_sessions__source', aliasPath: 'contact.sessions', operator: 'is_not_blank', sliceOnly: false,
+    });
+    expect(active({ ...filtered, includedPaths: [] })).toBe('contact.sessions');
+  });
+
+  it('uses the local choice, then an included instance', () => {
+    const included = includePath(emptyDraft(DM.visitor), 'contact.sessions');
+    expect(active(included)).toBe('contact.sessions');
+    expect(active(included, 'sessions')).toBe('sessions');
+    expect(active(emptyDraft(DM.visitor), 'nowhere')).toBe('sessions');
+  });
+
+  it('tells whether an instance holds selections', () => {
+    const draft = add(emptyDraft(DM.visitor), 'contact_sessions__source');
+    expect(hasSelections(draft, 'contact.sessions')).toBe(true);
+    expect(hasSelections(draft, 'contact')).toBe(false);
   });
 });
 

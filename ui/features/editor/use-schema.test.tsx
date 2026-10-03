@@ -14,7 +14,7 @@ it('loads the blendable schema and graph of the main data mart', async () => {
   const state = result.current.state;
   if (state.status !== 'ready') throw new Error('not ready');
   expect(state.index.groups[0]?.title).toBe('Visitor');
-  expect(state.graph.nodes).toHaveLength(6);
+  expect(state.graph.nodes).toHaveLength(8);
 });
 
 it('reports a failure and recovers on reload', async () => {

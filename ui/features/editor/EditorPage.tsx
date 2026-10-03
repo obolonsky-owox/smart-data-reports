@@ -405,7 +405,6 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       marts={marts!}
       filterRequest={filterRequest}
       onToggleField={toggleField}
-      onIncludePath={(path) => edit((d) => includePath(d, path))}
       onChangeInstancePath={changePath}
       onSetAggregations={(column, fns) => edit((d) => setAggregations(d, column, fns))}
       onSetDateTrunc={(column, unit) => edit((d) => setDateTrunc(d, column, unit))}
