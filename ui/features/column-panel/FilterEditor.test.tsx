@@ -38,3 +38,16 @@ it('saves on Enter in a value input', async () => {
   await userEvent.type(screen.getByRole('textbox', { name: 'Value' }), 'a@b.c{Enter}');
   expect(onSave).toHaveBeenCalledTimes(1);
 });
+
+it('offers the raw type operators for a slice and the joined type operators for a filter', async () => {
+  const onSave = vi.fn();
+  renderUi(
+    <FilterEditor field={index.fields.get('contact__is_mql')!} instanceLabel='Contact' mainTitle='Visitor' isJoined onSave={onSave} onCancel={vi.fn()} />,
+  );
+  const operators = () => [...screen.getByRole('combobox', { name: 'Operator' }).querySelectorAll('option')].map((o) => o.value);
+  expect(operators()).toContain('contains');
+  await userEvent.click(screen.getByRole('switch', { name: 'Only narrow Contact' }));
+  expect(operators()).toEqual(['is_true', 'is_false']);
+  await userEvent.click(screen.getByRole('button', { name: 'Save filter' }));
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ column: 'contact__is_mql', operator: 'is_true', sliceOnly: true }));
+});

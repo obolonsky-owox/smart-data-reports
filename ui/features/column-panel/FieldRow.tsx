@@ -7,6 +7,7 @@ import type { DraftColumn, DraftFilter } from '../../lib/report-draft';
 import type { FieldInfo } from '../../lib/schema-index';
 import { AggregationPopover } from './AggregationPopover';
 import { FieldFilterPopover } from './FieldFilterPopover';
+import { FieldType } from './FieldType';
 
 export interface FieldRowProps {
   field: FieldInfo;
@@ -41,7 +42,7 @@ export function FieldRow(props: FieldRowProps) {
         <span className='min-w-0 truncate font-mono text-xs' title={field.name}>
           {field.label}
         </span>
-        <span className='shrink-0 text-xs text-muted-foreground'>({field.type})</span>
+        <FieldType field={field} />
       </label>
       {/* Fixed height: the actions are conditional, and a row without them must not sit shorter. */}
       <span className='flex h-6 shrink-0 items-center'>

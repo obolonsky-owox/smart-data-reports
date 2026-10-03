@@ -1,4 +1,11 @@
-import { coerceFilterValue, describeFilter, isFilterValueMissing, operatorsFor } from './filter-operators';
+import { coerceFilterValue, describeFilter, filterKind, isFilterValueMissing, operatorsFor } from './filter-operators';
+
+it('compares a filter with the joined value and a slice with the raw one', () => {
+  const isMql = { kind: 'boolean' as const, joinedType: 'STRING' };
+  expect(filterKind(isMql, true)).toBe('boolean');
+  expect(filterKind(isMql, false)).toBe('text');
+  expect(filterKind({ kind: 'number' }, false)).toBe('number');
+});
 
 it('offers operators by field kind', () => {
   expect(operatorsFor('text').map((o) => o.label)).toEqual([

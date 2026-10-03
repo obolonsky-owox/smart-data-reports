@@ -9,8 +9,15 @@ export interface FieldInfo {
   name: string;
   label: string;
   description: string;
+  /** The field's own type, as its data mart's Output Schema shows it. */
   type: string;
   kind: FieldKind;
+  /**
+   * Joined fields only, when it differs from `type`: the type of the value after the join. ODM first folds a
+   * joined field per join key with its deduplication function, e.g. STRING_AGG turns a BOOLEAN into a STRING,
+   * so filters after the join and the report's values see this type; a slice still sees `type`.
+   */
+  joinedType?: string;
   aliasPath: AliasPath;
   /** The field's name inside its own data mart; stable across paths. */
   originalName: string;
@@ -133,12 +140,15 @@ export function buildSchemaIndex(main: { id: string; title: string }, schema: Bl
   for (const f of schema.blendedFields) {
     const instance = instances.get(f.aliasPath);
     if (!instance || instance.aliasPath === '' || f.isHidden || f.isCalculated) continue;
+    // `type` is the type after deduplication; `sourceFieldType` is the field's own, absent on older hosts.
+    const ownType = f.sourceFieldType || f.type;
     instance.fields.push({
       name: f.name,
       label: f.alias || f.originalFieldName,
       description: f.description,
-      type: f.type,
-      kind: fieldKind(f.type),
+      type: ownType,
+      kind: fieldKind(ownType),
+      ...(f.type && f.type !== ownType ? { joinedType: f.type } : {}),
       aliasPath: f.aliasPath,
       originalName: f.originalFieldName,
       allowedAggregations: f.postJoinAggregations,

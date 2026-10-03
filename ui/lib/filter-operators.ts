@@ -1,5 +1,5 @@
 import type { DraftFilter, FilterOperator } from './report-draft';
-import type { FieldKind } from './schema-index';
+import { fieldKind, type FieldInfo, type FieldKind } from './schema-index';
 
 export interface OperatorOption {
   operator: FilterOperator;
@@ -37,6 +37,11 @@ const BOOLEAN: OperatorOption[] = [
 ];
 
 const OTHER: OperatorOption[] = TEXT.filter((o) => o.input === 'none');
+
+/** The kind a rule compares against: a slice runs before the join and sees the raw value, a filter the joined one. */
+export function filterKind(field: Pick<FieldInfo, 'kind' | 'joinedType'>, slice: boolean): FieldKind {
+  return !slice && field.joinedType ? fieldKind(field.joinedType) : field.kind;
+}
 
 /** Dates are filtered through Date ranges only, so they get no operators here. */
 export function operatorsFor(kind: FieldKind): OperatorOption[] {
