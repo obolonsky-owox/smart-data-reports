@@ -76,12 +76,13 @@ const joinPathCard = async () => (await screen.findByRole('list', { name: 'Join 
 it('lists joined data marts by output alias, with the data mart title next to an alias', async () => {
   renderUi(<Harness />);
   const headers = [...document.querySelectorAll('[data-slot="alias-group-trigger"]')].map((b) => b.getAttribute('aria-label'));
-  expect(headers).toEqual(['Visitor', 'Contact', 'Contact First Session', 'Landing page', 'Page', 'Pageview', 'Session', 'User']);
-  expect(groupHeader('Contact First Session')).toHaveTextContent('Contact First Session · Session');
-  expect(groupHeader('Landing page')).toHaveTextContent('Landing page · Page');
+  expect(headers).toEqual([
+    'Visitor', 'Contact', 'Contact First Session · Session', 'Landing page · Page', 'Page', 'Pageview', 'Session', 'User',
+  ]);
+  expect(groupHeader('Contact First Session · Session')).toHaveTextContent('Contact First Session · Session');
   expect(groupHeader('Session')).not.toHaveTextContent('·');
 
-  await userEvent.click(groupHeader('Contact First Session'));
+  await userEvent.click(groupHeader('Contact First Session · Session'));
   await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Contact First Session)' }));
   await userEvent.click(groupHeader('Page'));
   await userEvent.click(screen.getByRole('checkbox', { name: 'Title (Page)' }));
@@ -116,6 +117,21 @@ it('moves the selected fields when another join path is chosen', async () => {
   expect(screen.getByRole('radio', { name: 'via Contact › Session' })).toBeChecked();
   expect(screen.getByRole('checkbox', { name: 'Source (Session)' })).toBeChecked();
   expect(screen.queryByRole('button', { name: '+ via another path' })).not.toBeInTheDocument();
+});
+
+it('keeps the moved-to join path after its selections are removed', async () => {
+  // No automatic date ranges, so removing the column leaves the path without selections.
+  renderUi(<Harness initial={{ ...emptyDraft(DM.visitor), dateRangeOptOut: ['sessions', 'contact.sessions'] }} />);
+  await userEvent.click(groupHeader('Session'));
+  await userEvent.click(screen.getByRole('radio', { name: 'via Contact › Session' }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  expect(columns()).toBe('contact_sessions__source');
+
+  await userEvent.click(screen.getByRole('radio', { name: 'via Session' }));
+  expect(columns()).toBe('sessions__source');
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  expect(columns()).toBe('');
+  expect(screen.getByRole('radio', { name: 'via Session' })).toBeChecked();
 });
 
 it('previews a join path when hovering a path variant', async () => {

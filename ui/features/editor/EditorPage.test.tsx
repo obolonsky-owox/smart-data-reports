@@ -53,6 +53,31 @@ it('asks which date to use for a joined mart with several dates', async () => {
   expect(within(screen.getByRole('region', { name: 'Date ranges' })).getByText('First Log In to OWOX Data Marts')).toBeInTheDocument();
 });
 
+it('confirms a join path change that drops selections, and keeps the path on cancel', async () => {
+  await startVisitorReport();
+  await userEvent.click(screen.getByRole('button', { name: 'Session' }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Page' }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Title (Page)' }));
+
+  await userEvent.click(screen.getByRole('radio', { name: 'via Contact › Session' }));
+  let dialog = await screen.findByRole('alertdialog');
+  expect(within(dialog).getByText('Change the join path?')).toBeInTheDocument();
+  expect(within(dialog).getByText(/will be removed: Title, Creation Date\./)).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'via Session' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Title (Page)' })).toBeChecked();
+
+  await userEvent.click(screen.getByRole('radio', { name: 'via Contact › Session' }));
+  dialog = await screen.findByRole('alertdialog');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Remove and continue' }));
+  expect(screen.getByRole('radio', { name: 'via Contact › Session' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Source (Session)' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Title (Page)' })).not.toBeChecked();
+  expect(screen.getByRole('tab', { name: 'Selected (1)' })).toBeInTheDocument();
+});
+
 it('routes a capped result to a Google Sheets report and then shows its SQL', async () => {
   __mock.setRows((columns) => sampleRows(columns, 2600));
   await startVisitorReport();

@@ -6,7 +6,7 @@ import { Input } from '@owox/ui/components/input';
 import { Switch } from '@owox/ui/components/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@owox/ui/components/tooltip';
 import { cn } from '@owox/ui/lib/utils';
-import { joinPath } from '../../lib/join-path';
+import { joinPath, variantLabels } from '../../lib/join-path';
 import type { AggregateFunction, DataMartSummary, DateTruncUnit, RelationshipGraph } from '../../lib/odm-types';
 import { activeVariant, hasSelections, type DraftFilter, type ReportDraft } from '../../lib/report-draft';
 import { chainLabel, type AliasPath, type FieldInfo, type MartGroup, type SchemaIndex } from '../../lib/schema-index';
@@ -122,12 +122,19 @@ function AliasGroupSection(props: AliasGroupSectionProps) {
 
   function choose(path: AliasPath) {
     if (path === active.aliasPath) return;
-    if (hasSelections(draft, active.aliasPath)) props.onChangeInstancePath(active.aliasPath, path);
-    else setChosen(path);
+    if (hasSelections(draft, active.aliasPath)) {
+      // The draft decides from here on: the moved selections, or the included path once they are removed.
+      setChosen(undefined);
+      props.onChangeInstancePath(active.aliasPath, path);
+    } else {
+      setChosen(path);
+    }
   }
 
   const Chevron = open ? ChevronDown : ChevronRight;
   const aliased = group.label !== group.title;
+  const heading = aliased ? `${group.label} · ${group.title}` : group.label;
+  const labels = group.instances.length > 1 ? variantLabels(index, graph, group.instances.map((i) => i.aliasPath)) : [];
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
@@ -136,11 +143,11 @@ function AliasGroupSection(props: AliasGroupSectionProps) {
           <CollapsibleTrigger
             data-slot='alias-group-trigger'
             className='flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left'
-            aria-label={group.label}
+            aria-label={heading}
             aria-describedby={selectedCount > 0 ? countId : undefined}
           >
             <Chevron className='h-4 w-4 shrink-0 text-muted-foreground' />
-            <span className='min-w-0 truncate text-xs' title={aliased ? `${group.label} · ${group.title}` : group.label}>
+            <span className='min-w-0 truncate text-xs' title={heading}>
               <span className='font-semibold'>{group.label}</span>
               {aliased && <span className='text-muted-foreground'> · {group.title}</span>}
             </span>
@@ -173,7 +180,7 @@ function AliasGroupSection(props: AliasGroupSectionProps) {
             {group.instances.length > 1 ? (
               <fieldset className='mb-1 flex flex-col gap-0.5 px-1 pb-1'>
                 <legend className='py-1 text-xs text-muted-foreground'>{group.instances.length} join paths</legend>
-                {group.instances.map((instance) => (
+                {group.instances.map((instance, i) => (
                   <JoinPathHoverCard key={instance.aliasPath} path={joinPath(index, graph, instance.aliasPath)}>
                     <label
                       className={cn(
@@ -188,7 +195,7 @@ function AliasGroupSection(props: AliasGroupSectionProps) {
                         checked={instance === active}
                         onChange={() => choose(instance.aliasPath)}
                       />
-                      <span className='min-w-0 truncate'>via {chainLabel(index, instance.aliasPath)}</span>
+                      <span className='min-w-0 truncate'>{labels[i]}</span>
                     </label>
                   </JoinPathHoverCard>
                 ))}
