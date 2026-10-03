@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { Button } from '@owox/ui/components/button';
 import { Input } from '@owox/ui/components/input';
 import { Switch } from '@owox/ui/components/switch';
@@ -94,8 +94,7 @@ export function FilterEditor({ field, instanceLabel, mainTitle, isJoined, filter
   const rule = ruleFromInput(field, input);
   if (!rule) return <p className='px-3 text-xs text-muted-foreground'>This field can't be filtered here.</p>;
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function save() {
     if (!rule) return;
     onSave({
       id: filter?.id ?? newFilterId(),
@@ -107,8 +106,17 @@ export function FilterEditor({ field, instanceLabel, mainTitle, isJoined, filter
     });
   }
 
+  // Enter in a single-line input saves, like a form would; a textarea keeps Enter for new lines.
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Enter' || !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    save();
+  }
+
+  // Not a <form>: ODM sandboxes the plugin iframe without `allow-forms`, and the browser
+  // blocks form submission there before a submit event ever fires.
   return (
-    <form aria-label={`Filter ${field.label}`} onSubmit={submit} className='flex flex-col gap-2 rounded-md border border-border bg-card p-3'>
+    <div role='form' aria-label={`Filter ${field.label}`} onKeyDown={onKeyDown} className='flex flex-col gap-2 rounded-md border border-border bg-card p-3'>
       <FilterValueFields field={field} input={input} onChange={setInput} />
       {isJoined && (
         <label className='flex items-start gap-2 text-sm'>
@@ -123,10 +131,10 @@ export function FilterEditor({ field, instanceLabel, mainTitle, isJoined, filter
         <Button type='button' variant='outline' size='sm' onClick={onCancel}>
           Cancel
         </Button>
-        <Button type='submit' size='sm'>
+        <Button type='button' size='sm' onClick={save}>
           Save filter
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
