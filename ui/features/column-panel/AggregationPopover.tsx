@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactElement } from 'react';
 import { Sigma } from 'lucide-react';
 import { Button } from '@owox/ui/components/button';
 import { Checkbox } from '@owox/ui/components/checkbox';
@@ -17,27 +17,30 @@ export interface AggregationPopoverProps {
   martLabel?: string;
   onSetAggregations(column: string, fns: AggregateFunction[] | undefined): void;
   onSetDateTrunc(column: string, unit: DateTruncUnit | undefined): void;
+  /** Opens the popover instead of the Σ button. */
+  trigger?: ReactElement;
 }
 
-export function AggregationPopover({ field, column, martLabel, onSetAggregations, onSetDateTrunc }: AggregationPopoverProps) {
+export function AggregationPopover({ field, column, martLabel, onSetAggregations, onSetDateTrunc, trigger }: AggregationPopoverProps) {
   const [open, setOpen] = useState(false);
   const active = !!column.aggregations?.length || !!column.dateTrunc;
+  const sigma = (
+    <button
+      type='button'
+      aria-label={`Aggregation for ${field.label}`}
+      className={cn(
+        'flex h-6 w-6 items-center justify-center rounded transition-opacity',
+        active
+          ? 'text-primary opacity-100'
+          : 'text-muted-foreground hover:text-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
+      )}
+    >
+      <Sigma className='h-4 w-4' />
+    </button>
+  );
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type='button'
-          aria-label={`Aggregation for ${field.label}`}
-          className={cn(
-            'flex h-6 w-6 items-center justify-center rounded transition-opacity',
-            active
-              ? 'text-primary opacity-100'
-              : 'text-muted-foreground hover:text-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
-          )}
-        >
-          <Sigma className='h-4 w-4' />
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger ?? sigma}</PopoverTrigger>
       <PopoverContent className='w-72 space-y-3'>
         {/* Mounted per opening, so every opening starts from the column's current settings. */}
         <AggregationEditor

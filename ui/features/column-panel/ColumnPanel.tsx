@@ -12,7 +12,7 @@ import { SelectedTab, type SelectedTabProps } from './SelectedTab';
 
 export interface ColumnPanelProps
   extends Omit<AllFieldsTabProps, 'index' | 'graph'>,
-    Omit<SelectedTabProps, 'index' | 'pendingFilterField'> {
+    Omit<SelectedTabProps, 'index' | 'graph' | 'pendingFilterField'> {
   /**
    * The main data mart's schema; both are null while it loads. The panel stays mounted meanwhile, so the
    * "Report on" choice keeps its focus, and only the field list shows a placeholder.
@@ -88,6 +88,7 @@ export function ColumnPanel(props: ColumnPanelProps) {
             <SelectedTab
               {...props}
               index={index}
+              graph={graph}
               pendingFilterField={pendingField}
               onPendingFilterDone={() => {
                 setPendingFilterField(null);
