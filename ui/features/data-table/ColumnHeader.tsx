@@ -5,16 +5,19 @@ import {
   DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@owox/ui/components/dropdown-menu';
 import { cn } from '@owox/ui/lib/utils';
-import type { AggregateFunction, DateTruncUnit } from '../../lib/odm-types';
+import type { AggregateFunction, DateTruncUnit, RelationshipGraph } from '../../lib/odm-types';
 import type { OutputColumn } from '../../lib/output-columns';
 import { aggregationsFor, FN_LABEL, TRUNC_OPTIONS } from '../../lib/aggregation-labels';
 import { describeFilter, filterKind } from '../../lib/filter-operators';
 import type { ReportDraft } from '../../lib/report-draft';
-import { chainLabel, type SchemaIndex } from '../../lib/schema-index';
+import type { SchemaIndex } from '../../lib/schema-index';
+import { MartLabel } from '../column-panel/MartLabel';
 
 export interface ColumnHeaderProps {
   out: OutputColumn;
   index: SchemaIndex;
+  /** Supplies the join path shown when a column's data mart is hovered. */
+  graph: RelationshipGraph;
   draft: ReportDraft;
   onSort(column: string, direction: 'asc' | 'desc' | null): void;
   onSetAggregations(column: string, fns: AggregateFunction[] | undefined): void;
@@ -23,10 +26,9 @@ export interface ColumnHeaderProps {
   onRemoveFilter(id: string): void;
 }
 
-export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onSetDateTrunc, onEditFilter, onRemoveFilter }: ColumnHeaderProps) {
+export function ColumnHeader({ out, index, graph, draft, onSort, onSetAggregations, onSetDateTrunc, onEditFilter, onRemoveFilter }: ColumnHeaderProps) {
   const name = out.column?.name;
   const field = name ? index.fields.get(name) : undefined;
-  const instance = field ? index.instances.get(field.aliasPath) : undefined;
   const sortAt = draft.sorts.findIndex((s) => s.column === name);
   const sort = draft.sorts[sortAt];
   const filters = draft.filters.filter((f) => f.column === name);
@@ -36,7 +38,6 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
 
   return (
     <th scope='col' className='min-w-[140px] px-3 py-2 text-left align-top font-normal'>
-      <div className='text-xs text-muted-foreground'>{instance ? (instance.aliasPath ? chainLabel(index, instance.aliasPath) : instance.label) : ''}</div>
       <div className='flex items-start gap-1'>
         <span className={cn('flex items-center gap-1 font-medium', sort && 'text-primary')}>
           {sort && (sort.direction === 'asc' ? <ArrowUp className='h-4 w-4' /> : <ArrowDown className='h-4 w-4' />)}
@@ -94,6 +95,8 @@ export function ColumnHeader({ out, index, draft, onSort, onSetAggregations, onS
           </DropdownMenu>
         )}
       </div>
+      {/* The field first, then the data mart it comes from; a joined one previews its join path on hover. */}
+      {field && <MartLabel index={index} graph={graph} aliasPath={field.aliasPath} className='block max-w-full self-start' />}
       {out.fn && (
         <div className='text-xs text-muted-foreground'>
           {out.fn}

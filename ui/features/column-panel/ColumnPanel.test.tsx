@@ -51,8 +51,8 @@ it('has no storage dropdown when storages are unknown', () => {
 it('shows issues and blocks Apply', async () => {
   const props = setup({ applyDisabled: true, issues: ['Pick at least one column.'] });
   expect(screen.getByText('Pick at least one column.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
-  await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  expect(screen.getByRole('button', { name: 'Apply & Save' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Apply & Save' }));
   expect(props.onApply).not.toHaveBeenCalled();
 });
 

@@ -2,10 +2,12 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { PluginContext } from '@owox/plugin-sdk';
 import { createOdmApi, type OdmApi, type OwoxClient } from './lib/odm-api';
 import { createReportStore, REPORTS_COLLECTION, type ReportStore, type StoredReport } from './lib/report-store';
+import { createSnapshotStore, SNAPSHOTS_COLLECTION, type RunSnapshot, type SnapshotStore } from './lib/run-snapshot';
 
 export interface Services {
   api: OdmApi;
   store: ReportStore;
+  snapshots: SnapshotStore;
   projectId: string;
   userId: string;
   theme: 'light' | 'dark';
@@ -32,6 +34,7 @@ export function servicesFromContext(ctx: PluginContext): Services {
     // ctx.owox is the full OWOX API client; OwoxClient is the structural subset we call.
     api: createOdmApi(ctx.owox as unknown as OwoxClient),
     store: createReportStore(ctx.collections<StoredReport>(REPORTS_COLLECTION)),
+    snapshots: createSnapshotStore(ctx.collections<RunSnapshot>(SNAPSHOTS_COLLECTION)),
     projectId: ctx.projectId,
     userId: ctx.userId,
     theme: ctx.theme,

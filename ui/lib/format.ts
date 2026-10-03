@@ -12,6 +12,11 @@ export function formatCount(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+/** `Oct 2, 2026, 10:49 AM` in the viewer's time zone. */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 export function formatRelativeTime(iso: string, now = new Date()): string {
   const seconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return 'just now';

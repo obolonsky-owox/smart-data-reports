@@ -1,4 +1,3 @@
-import type { OdmApi } from './odm-api';
 import type { DataMartSummary, StorageSummary } from './odm-types';
 
 export interface StorageGroup {
@@ -8,57 +7,37 @@ export interface StorageGroup {
 }
 
 export interface StorageCatalog {
-  /** Storages with at least one reportable data mart, in storage order. */
+  /** Storages with at least one reportable data mart, by title. */
   groups: StorageGroup[];
-  /** Reportable data marts that no storage lists. */
-  unassigned: DataMartSummary[];
   storageOf(dataMartId: string): string | undefined;
 }
 
 const reportable = (m: DataMartSummary) => m.status === 'PUBLISHED' && m.availableForReporting;
 
+/**
+ * Identifies a storage by what the data mart list tells about it: its type and title. The list carries no
+ * storage id, and reading the ids elsewhere (storages, model canvas) can fail for a storage the member can't
+ * see, which used to hide the whole storage choice.
+ */
+export function storageKey(storage: DataMartSummary['storage']): string {
+  return `${storage.type}/${storage.title}`;
+}
+
 /** Splits the reportable data marts by the storage that holds them. */
-export function groupByStorage(
-  storages: StorageSummary[],
-  martIdsByStorage: Readonly<Record<string, readonly string[]>>,
-  marts: DataMartSummary[],
-): StorageCatalog {
-  const storageByMart = new Map<string, string>();
-  for (const storage of storages) {
-    for (const id of martIdsByStorage[storage.id] ?? []) storageByMart.set(id, storage.id);
+export function groupByStorage(marts: DataMartSummary[]): StorageCatalog {
+  const groups = new Map<string, StorageGroup>();
+  for (const mart of marts.filter(reportable)) {
+    const id = storageKey(mart.storage);
+    let group = groups.get(id);
+    if (!group) {
+      group = { storage: { id, title: mart.storage.title || mart.storage.type, type: mart.storage.type }, marts: [] };
+      groups.set(id, group);
+    }
+    group.marts.push(mart);
   }
-  const candidates = marts.filter(reportable);
-  const groups = storages
-    .map((storage) => ({ storage, marts: candidates.filter((m) => storageByMart.get(m.id) === storage.id) }))
-    .filter((group) => group.marts.length > 0);
+  const storageByMart = new Map(marts.map((m) => [m.id, storageKey(m.storage)]));
   return {
-    groups,
-    unassigned: candidates.filter((m) => !storageByMart.has(m.id)),
+    groups: [...groups.values()].sort((a, b) => a.storage.title.localeCompare(b.storage.title)),
     storageOf: (dataMartId) => storageByMart.get(dataMartId),
   };
-}
-
-export interface StorageMembership {
-  storages: StorageSummary[];
-  martIdsByStorage: Record<string, string[]>;
-}
-
-/**
- * Loads every storage and the ids of the data marts it holds. A storage whose data marts can't be
- * loaded (e.g. one the member can't see) is dropped; its reportable data marts end up unassigned.
- */
-export async function loadStorageMembership(
-  api: Pick<OdmApi, 'listStorages' | 'listStorageMartIds'>,
-): Promise<StorageMembership> {
-  const all = await api.listStorages();
-  const results = await Promise.allSettled(all.map((s) => api.listStorageMartIds(s.id)));
-  const storages: StorageSummary[] = [];
-  const martIdsByStorage: Record<string, string[]> = {};
-  all.forEach((storage, i) => {
-    const result = results[i]!;
-    if (result.status === 'rejected') return;
-    storages.push(storage);
-    martIdsByStorage[storage.id] = result.value;
-  });
-  return { storages, martIdsByStorage };
 }

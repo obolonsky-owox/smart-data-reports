@@ -120,7 +120,7 @@ export function ColumnPanel(props: ColumnPanelProps) {
         ))}
         <Button className='w-full' disabled={props.applyDisabled} onClick={props.onApply} data-testid='apply'>
           {props.applying && <Loader2 className='h-4 w-4 animate-spin' />}
-          Apply
+          Apply & Save
         </Button>
       </div>
     </div>

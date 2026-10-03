@@ -5,7 +5,7 @@ import { Button } from '@owox/ui/components/button';
 import { Skeleton } from '@owox/ui/components/skeleton';
 import { cn } from '@owox/ui/lib/utils';
 import type { RunState } from '../editor/use-query-run';
-import { formatCell, formatCount } from '../../lib/format';
+import { formatCell, formatCount, formatDateTime } from '../../lib/format';
 import { outputColumns, pageCount, pageOf, PAGE_SIZE, totalFor } from '../../lib/output-columns';
 import { ROW_CAP } from '../../lib/read-plan';
 import type { ReportDraft } from '../../lib/report-draft';
@@ -19,6 +19,8 @@ export interface ResultTableProps extends Omit<ColumnHeaderProps, 'out'> {
   onCreateSheets(): void;
   onCancel(): void;
   onRetry(): void;
+  /** Runs the shown configuration again; offered while the result matches the report. */
+  onRefresh(): void;
 }
 
 function Empty({ title, subtitle, children }: { title: string; subtitle: string; children?: ReactNode }) {
@@ -43,9 +45,9 @@ export function ResultTable(props: ResultTableProps) {
 
   if (run.status === 'idle') {
     return run.cancelled ? (
-      <Empty title='Query cancelled' subtitle='Click Apply to run it again.' />
+      <Empty title='Query cancelled' subtitle='Click Apply & Save to run it again.' />
     ) : (
-      <Empty title='Pick columns and click Apply' subtitle='Queries run only when you click Apply, so you can set everything up first.' />
+      <Empty title='Pick columns and click Apply & Save' subtitle='Queries run only when you click Apply & Save, so you can set everything up first.' />
     );
   }
 
@@ -98,7 +100,12 @@ export function ResultTable(props: ResultTableProps) {
 
   return (
     <div className='flex min-h-0 flex-col gap-2 py-2'>
-      {stale && <p className='text-xs text-muted-foreground'>You changed the report. Click Apply to update the result.</p>}
+      {stale && <p className='text-xs text-muted-foreground'>You changed the report. Click Apply & Save to update the result.</p>}
+      {run.rowCount !== undefined && (
+        <p className='text-xs text-muted-foreground'>
+          Showing the first {formatCount(total)} of {formatCount(run.rowCount)} rows kept from the last run. Refresh to see them all.
+        </p>
+      )}
       {run.result.truncated && (
         <Alert className='border-warning/40 bg-warning-bg text-warning'>
           <TriangleAlert className='h-4 w-4' />
@@ -155,6 +162,15 @@ export function ResultTable(props: ResultTableProps) {
             </table>
           </div>
           <div className='flex items-center justify-end gap-2 text-sm text-muted-foreground'>
+            <span className='mr-auto flex items-center gap-2'>
+              <span>Last updated {formatDateTime(run.ranAt)}</span>
+              {!stale && (
+                <Button variant='ghost' size='sm' className='h-7 text-xs' onClick={props.onRefresh}>
+                  <RefreshCw className='h-4 w-4' />
+                  Refresh
+                </Button>
+              )}
+            </span>
             <span>
               {formatCount(first)}–{formatCount(last)} of {formatCount(total)}
             </span>

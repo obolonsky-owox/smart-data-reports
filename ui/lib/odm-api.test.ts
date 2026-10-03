@@ -25,8 +25,6 @@ function fakeOwox(overrides: Partial<OwoxClient> = {}) {
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const owox: OwoxClient = {
     dataMarts: { list: async () => DATA_MARTS, traverseData: async () => traversal([]) },
-    storages: { list: async () => [] },
-    models: { getDataMarts: async () => ({ items: [], total: 0, nextOffset: null }) },
     getJson: async <T,>(path: string) => {
       calls.push({ method: 'GET', path });
       return {} as T;
@@ -132,35 +130,15 @@ it('falls back to raw pages when the client rejects one unexpected data mart', a
   });
   const marts = await createOdmApi(owox).listDataMarts();
   expect(marts.map((m) => m.id)).toEqual(['dm-a', DATA_MARTS[0]!.id]);
-  expect(marts[0]).toEqual({ id: 'dm-a', title: 'Alpha', description: null, status: 'PUBLISHED', availableForReporting: true, storage: { type: '' } });
+  expect(marts[0]).toEqual({ id: 'dm-a', title: 'Alpha', description: null, status: 'PUBLISHED', availableForReporting: true, storage: { type: '', title: '' } });
   expect(queries).toEqual([undefined, { offset: '2' }]);
 });
 
-describe('storages', () => {
-  const node = (id: string) => ({ id, title: id, status: 'PUBLISHED' as const, description: null, fieldCount: 1 });
-
-  it('lists storages without the extra fields the client passes through', async () => {
-    const { owox } = fakeOwox({
-      storages: { list: async () => [{ id: 's1', title: 'Warehouse', type: 'GOOGLE_BIGQUERY', credentials: 'x' } as never] },
-    });
-    expect(await createOdmApi(owox).listStorages()).toEqual([{ id: 's1', title: 'Warehouse', type: 'GOOGLE_BIGQUERY' }]);
-  });
-
-  it('pages the data marts of a storage until there is no next offset', async () => {
-    const pages: Record<string, { items: ReturnType<typeof node>[]; total: number; nextOffset: number | null }> = {
-      start: { items: [node('a'), node('b')], total: 3, nextOffset: 2 },
-      2: { items: [node('c')], total: 3, nextOffset: null },
-    };
-    const getDataMarts = vi.fn(async (_storageId: string, offset?: number) => pages[offset ?? 'start']!);
-    const { owox } = fakeOwox({ models: { getDataMarts } });
-    expect(await createOdmApi(owox).listStorageMartIds('s1')).toEqual(['a', 'b', 'c']);
-    expect(getDataMarts.mock.calls).toEqual([['s1', undefined], ['s1', 2]]);
-  });
-
-  it('stops on a repeated offset instead of looping forever', async () => {
-    const { owox } = fakeOwox({ models: { getDataMarts: async () => ({ items: [node('a')], total: 9, nextOffset: 1 }) } });
-    await expect(createOdmApi(owox).listStorageMartIds('s1')).rejects.toThrow('repeated nextOffset 1');
-  });
+it('keeps the storage the data mart list names, without the rest of the item', async () => {
+  const item = { ...DATA_MARTS[0]!, storage: { type: 'GOOGLE_BIGQUERY', title: 'Warehouse', extra: 1 }, reportsCount: 3 };
+  const { owox } = fakeOwox({ dataMarts: { list: async () => [item], traverseData: async () => traversal([]) } });
+  const [mart] = await createOdmApi(owox).listDataMarts();
+  expect(mart).toEqual({ ...DATA_MARTS[0], storage: { type: 'GOOGLE_BIGQUERY', title: 'Warehouse' } });
 });
 
 it('creates and updates Google Sheets reports with the read plan', async () => {

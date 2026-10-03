@@ -24,7 +24,7 @@ it('saves a new report and tracks unsaved changes', async () => {
     result.current.setTitle('Visitors');
   });
   expect(result.current.dirty).toBe(true);
-  await act(async () => void (await result.current.saveWithSync()));
+  await act(async () => void (await result.current.saveDraft()));
   expect(result.current.dirty).toBe(false);
   expect(result.current.savedId).toBeDefined();
   expect([...__mock.state.collections.get('reports')!.values()][0]?.parentId).toBe(DM.visitor);
@@ -36,14 +36,14 @@ it("saves someone else's report as a copy without touching the original", async 
   const { result } = renderHook(() => useReportDocument('theirs'), { wrapper: wrapperFor(services) });
   await waitFor(() => expect(result.current.status).toBe('ready'));
   expect(result.current.isAuthor).toBe(false);
-  await act(async () => void (await result.current.saveWithSync({ asCopy: true })));
+  await act(async () => void (await result.current.saveDraft({ asCopy: true })));
   expect(result.current.savedId).not.toBe('theirs');
   expect(result.current.saved?.createdBy).toBe('demo-user');
   expect(result.current.title).toBe('Theirs (copy)');
   expect(__mock.state.collections.get('reports')!.get('theirs')?.document).toMatchObject({ title: 'Theirs' });
 });
 
-it('creates a linked Google Sheets report and then keeps it in sync on save', async () => {
+it('creates a linked Google Sheets report and then updates it on request, never on a plain save', async () => {
   const services = await mockServices();
   const { result } = renderHook(() => useReportDocument(undefined), { wrapper: wrapperFor(services) });
   act(() => result.current.setDraft(visitorDraft()));
@@ -52,9 +52,12 @@ it('creates a linked Google Sheets report and then keeps it in sync on save', as
   expect(linked).toMatchObject({ reportId: 'report-2', spreadsheetId: 'sheet-1' });
 
   act(() => result.current.setDraft({ ...visitorDraft(), columns: [{ name: 'client_id', aliasPath: '' }] }));
+  await act(async () => void (await result.current.saveDraft()));
+  expect(__mock.state.requests.some((r) => r.method === 'PUT' && r.path === '/api/reports/report-2')).toBe(false);
+  expect(result.current.saved?.linkedReport).toEqual(linked);
   let outcome: unknown;
   await act(async () => {
-    outcome = await result.current.saveWithSync();
+    outcome = await result.current.updateSheetsReport();
   });
   expect(outcome).toEqual({ kind: 'synced', runStatus: 'SUCCESS', runError: undefined });
   expect(__mock.state.requests.some((r) => r.method === 'PUT' && r.path === '/api/reports/report-2')).toBe(true);

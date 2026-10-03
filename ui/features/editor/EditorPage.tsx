@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Columns3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, Save, Sheet } from 'lucide-react';
+import { ArrowLeft, Columns3, PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -23,7 +23,8 @@ import {
   setSort, upsertFilter, type DateChoice, type RemapResult, type ReportDraft,
 } from '../../lib/report-draft';
 import { configHash } from '../../lib/report-store';
-import { groupByStorage, loadStorageMembership, type StorageCatalog, type StorageMembership } from '../../lib/storages';
+import { toSnapshot } from '../../lib/run-snapshot';
+import { groupByStorage, type StorageCatalog } from '../../lib/storages';
 import type { AliasPath, SchemaIndex } from '../../lib/schema-index';
 import { ColumnPanel } from '../column-panel/ColumnPanel';
 import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
@@ -33,7 +34,7 @@ import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
 import { SqlTab } from '../sql/SqlTab';
 import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
 import { useQueryRun } from './use-query-run';
-import { useReportDocument, type SaveOutcome } from './use-report-document';
+import { useReportDocument } from './use-report-document';
 import { useSchema } from './use-schema';
 
 interface PendingRemap { title: string; result: RemapResult; labels: string[] }
@@ -56,12 +57,10 @@ export function EditorPage(props: EditorPageProps) {
 }
 
 function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): void }) {
-  const { api, theme } = useServices();
+  const { api, snapshots, theme } = useServices();
   const doc = useReportDocument(reportId);
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
   const [martsError, setMartsError] = useState<UserFacingError | null>(null);
-  /** undefined while loading; null when storages couldn't be loaded, which falls back to one flat list. */
-  const [membership, setMembership] = useState<StorageMembership | null | undefined>(undefined);
   const [startStorageId, setStartStorageId] = useState('');
   const [startId, setStartId] = useState('');
   const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
@@ -100,21 +99,17 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       (list) => alive && setMarts(list),
       (error) => alive && setMartsError(describeError(error, 'data marts')),
     );
-    loadStorageMembership(api).then(
-      (loaded) => alive && setMembership(loaded),
-      () => alive && setMembership(null),
-    );
     return () => {
       alive = false;
     };
   }, [api]);
 
+  // A data mart list that names no storage (an older host) falls back to one flat list.
   const catalog = useMemo((): StorageCatalog | null => {
-    if (!marts || !membership) return null;
-    const grouped = groupByStorage(membership.storages, membership.martIdsByStorage, marts);
-    // Never hide a data mart: unless every reportable one has a storage, keep the flat list.
-    return grouped.groups.length > 0 && grouped.unassigned.length === 0 ? grouped : null;
-  }, [marts, membership]);
+    if (!marts || marts.some((m) => !m.storage.title)) return null;
+    const grouped = groupByStorage(marts);
+    return grouped.groups.length > 0 ? grouped : null;
+  }, [marts]);
 
   const draft = doc.draft;
   const mainMart = useMemo(() => marts?.find((m) => m.id === draft?.mainDataMartId), [marts, draft?.mainDataMartId]);
@@ -127,7 +122,29 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   // A result (or a running query) belongs to the main data mart it was applied on.
   const mainDataMartId = draft?.mainDataMartId;
   const resetQuery = query.reset;
-  useLayoutEffect(() => resetQuery(), [mainDataMartId, resetQuery]);
+  const currentMain = useRef(mainDataMartId);
+  useLayoutEffect(() => {
+    currentMain.current = mainDataMartId;
+    resetQuery();
+  }, [mainDataMartId, resetQuery]);
+
+  // A saved report opens on the member's last result of it, until they run it again.
+  const restoreQuery = query.restore;
+  const openedId = doc.status === 'ready' ? reportId : undefined;
+  useEffect(() => {
+    if (!openedId) return;
+    let alive = true;
+    snapshots.get(openedId).then(
+      (snapshot) => {
+        if (alive && snapshot && snapshot.draft.mainDataMartId === currentMain.current) restoreQuery(snapshot);
+      },
+      // Without a last result the report simply opens empty, as before.
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [openedId, snapshots, restoreQuery]);
   // So does a filter request from the table: the new data mart may not have that field.
   const [filterRequestMain, setFilterRequestMain] = useState(mainDataMartId);
   if (filterRequestMain !== mainDataMartId) {
@@ -150,6 +167,23 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const applied = query.state.status === 'success' || query.state.status === 'error' ? query.state.appliedHash : null;
   const stale = query.state.status === 'success' && applied !== hash;
   const linked = doc.saved?.linkedReport;
+
+  // The member's last result of the saved configuration, kept for the next time they open the report.
+  const savedHash = doc.saved ? configHash(doc.saved.draft) : null;
+  const savedId = doc.savedId;
+  const written = useRef<string | null>(null);
+  useEffect(() => {
+    const s = query.state;
+    if (s.status !== 'success' || s.restored || !s.settled || !savedId || s.appliedHash !== savedHash) return;
+    const key = `${savedId}@${s.ranAt}`;
+    if (written.current === key) return;
+    written.current = key;
+    const snapshot = toSnapshot({
+      ranAt: s.ranAt, configHash: s.appliedHash, draft: s.appliedDraft, rows: s.result.rows, truncated: s.result.truncated, totals: s.totals,
+    });
+    // A result that can't be kept only means the next opening starts empty.
+    snapshots.put(savedId, snapshot).catch(() => undefined);
+  }, [query.state, savedId, savedHash, snapshots]);
 
   function toggleField(name: string, checked: boolean) {
     if (!index || !draft) return;
@@ -194,30 +228,12 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     void query.run(draft.mainDataMartId, draft, mainMart?.title);
   }
 
-  function report(outcome: SaveOutcome) {
-    switch (outcome.kind) {
-      case 'link-missing':
-        toast.warning('The Google Sheets report was deleted in ODM. Create a new one to keep a spreadsheet in sync.');
-        break;
-      case 'link-dropped':
-        toast.warning(`Saved. The Google Sheets report reads the previous data mart, so it's no longer linked. You can create a new Google Sheets report for ${mainMart?.title ?? 'this data mart'}.`);
-        break;
-      case 'sync-failed':
-        toast.warning(`Saved. Google Sheets wasn't updated: ${outcome.message}`);
-        break;
-      case 'synced':
-        if (outcome.runStatus === 'SUCCESS') toast.success('Saved and updated Google Sheets.');
-        else toast.error(`Saved, but the Google Sheets run failed${outcome.runError ? `: ${outcome.runError}` : '.'}`);
-        break;
-      default:
-        toast.success('Report saved.');
-    }
-  }
+  const shownCurrent = query.state.status === 'success' && !stale;
 
   async function save(asCopy = false): Promise<boolean> {
     setSaving(true);
     try {
-      report(await doc.saveWithSync({ asCopy, hasIssues: issues.length > 0 }));
+      await doc.saveDraft({ asCopy });
       return true;
     } catch (error) {
       toast.error(describeError(error).message);
@@ -227,10 +243,17 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     }
   }
 
+  /** Saves what changed, then runs the query unless the table already shows this configuration. */
+  async function applyAndSave(asCopy = false) {
+    if (!draft || issues.length) return;
+    if ((doc.dirty || asCopy) && !(await save(asCopy))) return;
+    if (!shownCurrent) apply();
+  }
+
   // Saving and both Google Sheets flows write the document, so another member's report asks first.
   function perform(action: GuardedAction, asCopy: boolean) {
     if (action === 'save') {
-      void save(asCopy);
+      void applyAndSave(asCopy);
       return;
     }
     if (!asCopy) {
@@ -275,11 +298,6 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
             <Sheet className='h-4 w-4' />
             {linked ? 'Update Google Sheets' : 'Create Google Sheets report'}
           </Button>
-          {doc.dirty && <span role='status' aria-label='Unsaved changes' className='size-2 rounded-full bg-primary' />}
-          <Button disabled={!index || !doc.dirty || saving} onClick={() => guard('save')}>
-            {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className='h-4 w-4' />}
-            {linked ? 'Save and update Google Sheets' : 'Save'}
-          </Button>
           <Button variant='ghost' size='icon' aria-label={panelShown ? 'Hide column panel' : 'Show column panel'} onClick={togglePanel}>
             {panelShown ? <PanelRightClose className='h-4 w-4' /> : <PanelRightOpen className='h-4 w-4' />}
           </Button>
@@ -303,7 +321,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     </header>
   );
 
-  if (doc.status === 'loading' || (!martsError && (!marts || membership === undefined))) {
+  if (doc.status === 'loading' || (!martsError && !marts)) {
     return (
       <div className='dm-page' data-testid='editorPage'>
         {header()}
@@ -346,7 +364,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   }
 
   // The start choice: a storage (when known), then one of its reportable data marts.
-  const startGroup = catalog?.groups.find((g) => g.storage.id === startStorageId) ?? catalog?.groups[0];
+  // Until the user picks one, start in the storage that holds the most data marts.
+  const largestGroup = catalog?.groups.reduce((best, g) => (g.marts.length > best.marts.length ? g : best));
+  const startGroup = catalog?.groups.find((g) => g.storage.id === startStorageId) ?? largestGroup;
   const startMarts = startGroup?.marts ?? marts ?? [];
   const startMartId = startMarts.some((m) => m.id === startId) ? startId : (startMarts[0]?.id ?? '');
   const startPicker = (action: string, variant: 'default' | 'outline') => (
@@ -494,9 +514,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onRemoveColumn={(name) => edit((d) => removeColumn(d, name))}
       onPendingFilterDone={() => setFilterRequest(null)}
       onChangeMain={(id, origin) => void changeMain(id, origin)}
-      onApply={apply}
-      applyDisabled={!index || issues.length > 0 || (query.state.status === 'success' && !stale)}
-      applying={query.state.status === 'running'}
+      onApply={() => (doc.dirty && !doc.isAuthor ? setGuarded('save') : void applyAndSave())}
+      applyDisabled={!index || issues.length > 0 || saving || (shownCurrent && !doc.dirty)}
+      applying={saving || query.state.status === 'running'}
       issues={visibleIssues}
     />
   );
@@ -523,6 +543,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
               <TabsContent value='table'>
                 <ResultTable
                   index={index}
+                  graph={graph}
                   draft={draft}
                   run={query.state}
                   stale={stale}
@@ -535,6 +556,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   onCreateSheets={openSheets}
                   onCancel={query.cancel}
                   onRetry={apply}
+                  onRefresh={apply}
                 />
               </TabsContent>
               <TabsContent value='canvas'>

@@ -1,6 +1,6 @@
 import type {
   BlendableSchema, DataMartSummary, RelationshipGraph, ReportRunStatus, ReportSummary, Row,
-  SheetsDestination, SpreadsheetRef, StorageSummary, Totals,
+  SheetsDestination, SpreadsheetRef, Totals,
 } from './odm-types';
 import { ROW_CAP, type ReportConfig, type TraverseOptions } from './read-plan';
 
@@ -15,10 +15,6 @@ export interface OwoxClient {
   dataMarts: {
     list(): Promise<DataMartSummary[]>;
     traverseData(dataMartId: string, options: TraverseOptions): Promise<Traversal>;
-  };
-  storages: { list(): Promise<StorageSummary[]> };
-  models: {
-    getDataMarts(storageId: string, offset?: number): Promise<{ items: { id: string }[]; total: number; nextOffset: number | null }>;
   };
   getJson<T>(path: string, query?: Record<string, string>): Promise<T>;
   postJson<T>(path: string, body: unknown): Promise<T>;
@@ -67,14 +63,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 function reportableMart(item: unknown): DataMartSummary | null {
   if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
   if (item.status !== 'PUBLISHED' || item.availableForReporting !== true) return null;
-  const storage = isRecord(item.storage) && typeof item.storage.type === 'string' ? item.storage.type : '';
+  const storage = isRecord(item.storage) ? item.storage : {};
   return {
     id: item.id,
     title: item.title,
     description: typeof item.description === 'string' ? item.description : null,
     status: 'PUBLISHED',
     availableForReporting: true,
-    storage: { type: storage },
+    storage: {
+      type: typeof storage.type === 'string' ? storage.type : '',
+      title: typeof storage.title === 'string' ? storage.title : '',
+    },
   };
 }
 
@@ -106,32 +105,12 @@ export function createOdmApi(owox: OwoxClient) {
     async listDataMarts(): Promise<DataMartSummary[]> {
       let all: DataMartSummary[];
       try {
-        all = (await owox.dataMarts.list()).filter((m) => m.status === 'PUBLISHED' && m.availableForReporting);
+        all = (await owox.dataMarts.list()).flatMap((m) => reportableMart(m) ?? []);
       } catch {
         // The client rejects the whole list over one item it doesn't recognise, e.g. a new storage type.
         all = await listDataMartsLeniently(owox);
       }
       return all.sort((a, b) => a.title.localeCompare(b.title));
-    },
-
-    async listStorages(): Promise<StorageSummary[]> {
-      return (await owox.storages.list()).map(({ id, title, type }) => ({ id, title, type }));
-    },
-
-    /** Ids of every data mart in a storage, from the model canvas; relationships never cross storages. */
-    async listStorageMartIds(storageId: string): Promise<string[]> {
-      const ids: string[] = [];
-      // The first page is offset 0.
-      const seen = new Set<number>([0]);
-      let offset: number | undefined;
-      for (;;) {
-        const page = await owox.models.getDataMarts(storageId, offset);
-        ids.push(...page.items.map((item) => item.id));
-        if (page.nextOffset === null) return ids;
-        if (seen.has(page.nextOffset)) throw new Error(`OWOX model canvas API returned repeated nextOffset ${page.nextOffset}`);
-        seen.add(page.nextOffset);
-        offset = page.nextOffset;
-      }
     },
 
     getBlendableSchema: (dataMartId: string) =>
