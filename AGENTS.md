@@ -14,6 +14,7 @@ Read first: `docs/superpowers/specs/2026-10-02-smart-data-reports-design.md`, th
 - `ui/vendor/owox-ui/` is a verbatim copy of ODM UI; refresh it with
   `npm run sync:ui -- <owox-data-marts checkout> [ref]`, never edit it by hand.
 - No `localStorage`/`sessionStorage`/cookies/IndexedDB; persist through the `reports` collection.
+- The iframe sandbox is `allow-scripts allow-downloads` only: no `<form>` submission (the browser drops it before `submit` fires), no `alert`/`confirm`/`window.open`, no clipboard. Save on button clicks; open links via `ctx.ui.openExternal`.
 - The `reports` collection declaration in `plugin.json` is final. `ui/plugin-manifest.test.ts` guards it.
 - Commits, PRs, code comments in English. Never commit `node_modules/`, `dist/`, `.DS_Store`, `.env*`.
 - Done means `npm run lint && npm run typecheck && npm test && npm run build` pass and
