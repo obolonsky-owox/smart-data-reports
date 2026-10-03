@@ -123,7 +123,8 @@ export interface DataMartSummary {
   description: string | null;
   status: 'DRAFT' | 'PUBLISHED';
   availableForReporting: boolean;
-  storage: { type: string };
+  /** The data mart list names the storage but carries no storage id. */
+  storage: { type: string; title: string };
 }
 
 /** A data storage of the project; relationships never cross storages. */

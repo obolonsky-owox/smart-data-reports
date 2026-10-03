@@ -173,7 +173,8 @@ describe('storages', () => {
     const storage = await screen.findByRole('combobox', { name: 'Storage' });
     expect(screen.getByText('Storage', { selector: 'label' })).toBeVisible();
     expect(screen.getByText('Data mart', { selector: 'span' })).toBeVisible();
-    expect(within(storage).getAllByRole('option').map((o) => o.textContent)).toEqual(['Marketing BigQuery', 'Finance Snowflake']);
+    expect(within(storage).getAllByRole('option').map((o) => o.textContent)).toEqual(['Finance Snowflake', 'Marketing BigQuery']);
+    // No storage was picked yet, so the one with the most data marts comes first.
     expect(storage).toHaveValue(STORAGE.bigquery);
 
     const picker = screen.getByRole('combobox', { name: 'Data mart' });
@@ -226,12 +227,11 @@ describe('storages', () => {
     expect(screen.getByRole('combobox', { name: 'Report on' })).toHaveTextContent('Invoice');
   });
 
-  it.each([
-    ['storages', '/api/data-storages'],
-    ['data marts of a storage', '/api/model-canvas/data-marts'],
-  ])('falls back to every reportable data mart when the %s fail to load', async (_what, path) => {
-    __mock.fail(path, { code: 'HTTP_ERROR', status: 403, message: 'Forbidden' });
-    renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
+  it('falls back to every reportable data mart when the data mart list names no storage', async () => {
+    const services = await mockServices();
+    const list = services.api.listDataMarts;
+    services.api = { ...services.api, listDataMarts: async () => (await list()).map((m) => ({ ...m, storage: { type: m.storage.type, title: '' } })) };
+    renderWithServices(<EditorPage onBack={vi.fn()} />, services);
     await userEvent.click(await screen.findByRole('combobox', { name: 'Data mart' }));
     expect(screen.queryByRole('combobox', { name: 'Storage' })).not.toBeInTheDocument();
     expect(optionTitles(screen.getByRole('listbox', { name: 'Data mart' }))).toEqual([

@@ -23,7 +23,7 @@ import {
   setSort, upsertFilter, type DateChoice, type RemapResult, type ReportDraft,
 } from '../../lib/report-draft';
 import { configHash } from '../../lib/report-store';
-import { groupByStorage, loadStorageMembership, type StorageCatalog, type StorageMembership } from '../../lib/storages';
+import { groupByStorage, type StorageCatalog } from '../../lib/storages';
 import type { AliasPath, SchemaIndex } from '../../lib/schema-index';
 import { ColumnPanel } from '../column-panel/ColumnPanel';
 import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
@@ -60,8 +60,6 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const doc = useReportDocument(reportId);
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
   const [martsError, setMartsError] = useState<UserFacingError | null>(null);
-  /** undefined while loading; null when storages couldn't be loaded, which falls back to one flat list. */
-  const [membership, setMembership] = useState<StorageMembership | null | undefined>(undefined);
   const [startStorageId, setStartStorageId] = useState('');
   const [startId, setStartId] = useState('');
   const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
@@ -100,21 +98,17 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       (list) => alive && setMarts(list),
       (error) => alive && setMartsError(describeError(error, 'data marts')),
     );
-    loadStorageMembership(api).then(
-      (loaded) => alive && setMembership(loaded),
-      () => alive && setMembership(null),
-    );
     return () => {
       alive = false;
     };
   }, [api]);
 
+  // A data mart list that names no storage (an older host) falls back to one flat list.
   const catalog = useMemo((): StorageCatalog | null => {
-    if (!marts || !membership) return null;
-    const grouped = groupByStorage(membership.storages, membership.martIdsByStorage, marts);
-    // Never hide a data mart: unless every reportable one has a storage, keep the flat list.
-    return grouped.groups.length > 0 && grouped.unassigned.length === 0 ? grouped : null;
-  }, [marts, membership]);
+    if (!marts || marts.some((m) => !m.storage.title)) return null;
+    const grouped = groupByStorage(marts);
+    return grouped.groups.length > 0 ? grouped : null;
+  }, [marts]);
 
   const draft = doc.draft;
   const mainMart = useMemo(() => marts?.find((m) => m.id === draft?.mainDataMartId), [marts, draft?.mainDataMartId]);
@@ -303,7 +297,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     </header>
   );
 
-  if (doc.status === 'loading' || (!martsError && (!marts || membership === undefined))) {
+  if (doc.status === 'loading' || (!martsError && !marts)) {
     return (
       <div className='dm-page' data-testid='editorPage'>
         {header()}
@@ -346,7 +340,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   }
 
   // The start choice: a storage (when known), then one of its reportable data marts.
-  const startGroup = catalog?.groups.find((g) => g.storage.id === startStorageId) ?? catalog?.groups[0];
+  // Until the user picks one, start in the storage that holds the most data marts.
+  const largestGroup = catalog?.groups.reduce((best, g) => (g.marts.length > best.marts.length ? g : best));
+  const startGroup = catalog?.groups.find((g) => g.storage.id === startStorageId) ?? largestGroup;
   const startMarts = startGroup?.marts ?? marts ?? [];
   const startMartId = startMarts.some((m) => m.id === startId) ? startId : (startMarts[0]?.id ?? '');
   const startPicker = (action: string, variant: 'default' | 'outline') => (

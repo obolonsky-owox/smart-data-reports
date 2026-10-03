@@ -69,21 +69,16 @@ export const DATA_MARTS: DataMartSummary[] = (Object.values(DM) as MartId[]).map
   description: `${TITLES[id]} data mart.`,
   status: 'PUBLISHED' as const,
   availableForReporting: true,
-  storage: { type: id === DM.invoice ? 'SNOWFLAKE' : 'GOOGLE_BIGQUERY' },
+  storage: id === DM.invoice ? { type: 'SNOWFLAKE', title: 'Finance Snowflake' } : { type: 'GOOGLE_BIGQUERY', title: 'Marketing BigQuery' },
 }));
 
-export const STORAGE = { bigquery: 'storage-bigquery', snowflake: 'storage-snowflake' } as const;
+/** Storage keys as `storageKey` builds them from the data mart list. */
+export const STORAGE = { bigquery: 'GOOGLE_BIGQUERY/Marketing BigQuery', snowflake: 'SNOWFLAKE/Finance Snowflake' } as const;
 
 export const STORAGES: StorageSummary[] = [
-  { id: STORAGE.bigquery, title: 'Marketing BigQuery', type: 'GOOGLE_BIGQUERY' },
   { id: STORAGE.snowflake, title: 'Finance Snowflake', type: 'SNOWFLAKE' },
+  { id: STORAGE.bigquery, title: 'Marketing BigQuery', type: 'GOOGLE_BIGQUERY' },
 ];
-
-/** Data mart ids per storage, as the model canvas lists them. */
-export const STORAGE_MART_IDS: Record<string, string[]> = {
-  [STORAGE.bigquery]: DATA_MARTS.filter((m) => m.storage.type === 'GOOGLE_BIGQUERY').map((m) => m.id),
-  [STORAGE.snowflake]: [DM.invoice],
-};
 
 interface Join {
   aliasPath: string;
