@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@owox/ui/components/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@owox/ui/components/tabs';
+import { DataMartPicker } from '../../components/DataMartPicker';
 import { NativeSelect } from '../../components/NativeSelect';
+import type { StorageSummary } from '../../lib/odm-types';
 import { AllFieldsTab, type AllFieldsTabProps } from './AllFieldsTab';
 import { SelectedTab, type SelectedTabProps } from './SelectedTab';
 
@@ -11,6 +13,11 @@ export interface ColumnPanelProps
     Omit<SelectedTabProps, 'pendingFilterField'> {
   /** A request to open the filter editor for a field; `nonce` lets the same field be requested twice. */
   filterRequest: { field: string; nonce: number } | null;
+  /** Storages with reportable data marts; null when they couldn't be loaded, which hides the storage dropdown. */
+  storages: StorageSummary[] | null;
+  /** The main data mart's storage. */
+  storageId: string | undefined;
+  onChangeStorage(storageId: string): void;
   onChangeMain(dataMartId: string): void;
   onApply(): void;
   applyDisabled: boolean;
@@ -33,16 +40,22 @@ export function ColumnPanel(props: ColumnPanelProps) {
   return (
     <div className='flex h-full min-h-0 flex-col bg-background' data-testid='columnPanel'>
       <div className='flex flex-col gap-1 border-b border-border p-3'>
-        <label htmlFor='main-data-mart' className='text-xs text-muted-foreground'>
-          Report on
-        </label>
-        <NativeSelect id='main-data-mart' value={draft.mainDataMartId} onChange={(e) => props.onChangeMain(e.target.value)}>
-          {marts.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.title}
-            </option>
-          ))}
-        </NativeSelect>
+        {props.storages && (
+          <>
+            <label htmlFor='main-storage' className='text-xs text-muted-foreground'>
+              Storage
+            </label>
+            <NativeSelect id='main-storage' className='mb-2' value={props.storageId} onChange={(e) => props.onChangeStorage(e.target.value)}>
+              {props.storages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </>
+        )}
+        <span className='text-xs text-muted-foreground'>Report on</span>
+        <DataMartPicker label='Report on' marts={marts} value={draft.mainDataMartId} onChange={props.onChangeMain} />
         <p className='text-xs text-muted-foreground'>1 row = 1 {main.title}</p>
       </div>
 

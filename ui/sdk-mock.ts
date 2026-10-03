@@ -1,5 +1,5 @@
 import type { PluginContext } from '@owox/plugin-sdk';
-import { DATA_MARTS, GRAPHS, SCHEMAS, sampleRows } from './fixtures/smart-data';
+import { DATA_MARTS, GRAPHS, SCHEMAS, sampleRows, STORAGE_MART_IDS, STORAGES } from './fixtures/smart-data';
 import type { ReportSummary, Row } from './lib/odm-types';
 import type { CollectionDoc, StoredReport } from './lib/report-store';
 
@@ -104,6 +104,30 @@ const owox = {
       rows = rows.slice(0, options.limit ?? rows.length);
       state.lastRows = rows;
       return traversal(rows, `run-${state.clock}`);
+    },
+  },
+
+  storages: {
+    async list() {
+      state.requests.push({ method: 'GET', path: '/api/data-storages' });
+      maybeFail('/api/data-storages', 'GET');
+      return STORAGES;
+    },
+  },
+
+  models: {
+    /** Pages of four, so dev and tests exercise the paging. */
+    async getDataMarts(storageId: string, offset = 0) {
+      const path = '/api/model-canvas/data-marts';
+      state.requests.push({ method: 'GET', path, body: { storageId, offset } });
+      maybeFail(path, 'GET');
+      const ids = STORAGE_MART_IDS[storageId];
+      if (!ids) throw notFound();
+      const items = DATA_MARTS.filter((m) => ids.includes(m.id)).map((m) => ({
+        id: m.id, title: m.title, status: m.status, description: m.description, fieldCount: SCHEMAS[m.id]?.nativeFields.length ?? 0,
+      }));
+      const next = offset + 4;
+      return { items: items.slice(offset, next), total: items.length, nextOffset: next < items.length ? next : null };
     },
   },
 

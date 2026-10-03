@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DATA_MARTS, DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
+import { DATA_MARTS, DM, STORAGE, STORAGES, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
 import { buildSchemaIndex } from '../../lib/schema-index';
 import { emptyDraft } from '../../lib/report-draft';
 import { renderUi } from '../../test/render';
@@ -14,6 +14,7 @@ function setup(overrides: Partial<Parameters<typeof ColumnPanel>[0]> = {}) {
     onToggleField: vi.fn(), onChangeInstancePath: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(),
     onSetDateRange: vi.fn(), onRemoveDateRange: vi.fn(), onUpsertFilter: vi.fn(), onRemoveFilter: vi.fn(),
     onMoveColumn: vi.fn(), onRemoveColumn: vi.fn(), onPendingFilterDone: vi.fn(),
+    storages: null, storageId: undefined, onChangeStorage: vi.fn(),
     onChangeMain: vi.fn(), onApply: vi.fn(), applyDisabled: false, applying: false, issues: [],
     ...overrides,
   };
@@ -24,8 +25,26 @@ function setup(overrides: Partial<Parameters<typeof ColumnPanel>[0]> = {}) {
 it('shows the grain and changes the main data mart', async () => {
   const props = setup();
   expect(screen.getByText('1 row = 1 Visitor')).toBeInTheDocument();
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Report on' }), DM.session);
+  const reportOn = screen.getByRole('combobox', { name: 'Report on' });
+  expect(reportOn).toHaveTextContent('Visitor');
+  await userEvent.click(reportOn);
+  await userEvent.type(screen.getByRole('textbox', { name: 'Search data marts' }), 'sess');
+  await userEvent.click(screen.getByRole('option', { name: 'Session' }));
   expect(props.onChangeMain).toHaveBeenCalledWith(DM.session);
+});
+
+it('shows the storage above Report on and reports a storage change', async () => {
+  const props = setup({ storages: STORAGES, storageId: STORAGE.bigquery });
+  const storage = screen.getByRole('combobox', { name: 'Storage' });
+  expect(storage).toHaveValue(STORAGE.bigquery);
+  expect(storage.compareDocumentPosition(screen.getByRole('combobox', { name: 'Report on' }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  await userEvent.selectOptions(storage, STORAGE.snowflake);
+  expect(props.onChangeStorage).toHaveBeenCalledWith(STORAGE.snowflake);
+});
+
+it('has no storage dropdown when storages are unknown', () => {
+  setup();
+  expect(screen.queryByRole('combobox', { name: 'Storage' })).not.toBeInTheDocument();
 });
 
 it('shows issues and blocks Apply', async () => {

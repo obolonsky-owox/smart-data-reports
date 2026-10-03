@@ -18,6 +18,7 @@ export interface AllFieldsTabProps {
   /** Supplies the join keys shown in the join-path preview. */
   graph: RelationshipGraph;
   draft: ReportDraft;
+  /** Reportable data marts of the main data mart's storage; the rest are never reachable from it. */
   marts: DataMartSummary[];
   onToggleField(name: string, checked: boolean): void;
   /** Moves the selections of one join path to another; the editor confirms anything that would be lost. */

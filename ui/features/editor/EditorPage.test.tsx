@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
-import { DM, sampleRows } from '../../fixtures/smart-data';
+import { DM, sampleRows, STORAGE } from '../../fixtures/smart-data';
 import { emptyDraft, type ReportDraft } from '../../lib/report-draft';
 import { configHash, type StoredReport } from '../../lib/report-store';
 import { __mock, __resetForTests } from '../../sdk-mock';
@@ -18,9 +18,17 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const optionTitles = (list: HTMLElement) => within(list).queryAllByRole('option').map((o) => o.textContent);
+
+/** Picks a data mart in the searchable picker named `name`. */
+async function pickMart(name: 'Data mart' | 'Report on', title: string) {
+  await userEvent.click(await screen.findByRole('combobox', { name }));
+  await userEvent.click(within(screen.getByRole('listbox', { name })).getByRole('option', { name: title }));
+}
+
 async function startVisitorReport() {
   renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
-  await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+  await pickMart('Data mart', 'Visitor');
   await userEvent.click(screen.getByRole('button', { name: 'Start' }));
   await screen.findByTestId('columnPanel');
 }
@@ -114,16 +122,100 @@ it('cancels the running query and clears the result when the main data mart chan
     runQuery: vi.fn((_id: string, _options: unknown, s?: AbortSignal) => ((signal = s), new Promise<never>(() => {}))),
   };
   renderWithServices(<EditorPage onBack={vi.fn()} />, services);
-  await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+  await pickMart('Data mart', 'Visitor');
   await userEvent.click(screen.getByRole('button', { name: 'Start' }));
   await userEvent.click(await screen.findByRole('checkbox', { name: 'Email (Visitor)' }));
   await userEvent.click(screen.getByTestId('apply'));
   expect(await screen.findByText('Running query…')).toBeInTheDocument();
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Report on' }), DM.session);
+  await pickMart('Report on', 'Session');
   await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove and continue' }));
   expect(await screen.findByText('Pick columns and click Apply')).toBeInTheDocument();
   expect(screen.queryByText('Running query…')).not.toBeInTheDocument();
   expect(signal?.aborted).toBe(true);
+});
+
+describe('storages', () => {
+  it('filters the start screen by storage and searches the data marts', async () => {
+    renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
+    const storage = await screen.findByRole('combobox', { name: 'Storage' });
+    expect(within(storage).getAllByRole('option').map((o) => o.textContent)).toEqual(['Marketing BigQuery', 'Finance Snowflake']);
+    expect(storage).toHaveValue(STORAGE.bigquery);
+
+    const picker = screen.getByRole('combobox', { name: 'Data mart' });
+    expect(picker).toHaveTextContent('Contact');
+    await userEvent.click(picker);
+    expect(optionTitles(screen.getByRole('listbox', { name: 'Data mart' }))).toEqual(['Contact', 'Page', 'Pageview', 'Session', 'User', 'Visitor']);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search data marts' }), 'sess');
+    expect(optionTitles(screen.getByRole('listbox', { name: 'Data mart' }))).toEqual(['Session']);
+    await userEvent.keyboard('{Enter}');
+    expect(picker).toHaveTextContent('Session');
+
+    await userEvent.selectOptions(storage, STORAGE.snowflake);
+    expect(picker).toHaveTextContent('Invoice');
+    await userEvent.click(picker);
+    expect(optionTitles(screen.getByRole('listbox', { name: 'Data mart' }))).toEqual(['Invoice']);
+    await userEvent.keyboard('{Escape}');
+
+    // Changing the storage resets the data mart choice.
+    await userEvent.selectOptions(storage, STORAGE.bigquery);
+    expect(picker).toHaveTextContent('Contact');
+  });
+
+  it("shows a saved report's storage and switches the main data mart with it after confirming", async () => {
+    __mock.seedReport('r1', {
+      schemaVersion: 1, title: 'Visitors', createdBy: 'demo-user', updatedBy: 'demo-user',
+      draft: { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }] },
+    });
+    renderWithServices(<EditorPage reportId='r1' onBack={vi.fn()} />, await mockServices());
+    await screen.findByRole('checkbox', { name: 'Email (Visitor)' });
+    const storage = screen.getByRole('combobox', { name: 'Storage' });
+    expect(storage).toHaveValue(STORAGE.bigquery);
+    // Invoice lives in another storage, so it's neither offered nor counted as unreachable.
+    await userEvent.click(screen.getByRole('combobox', { name: 'Report on' }));
+    expect(optionTitles(screen.getByRole('listbox', { name: 'Report on' }))).not.toContain('Invoice');
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByText(/can't be reached/)).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(storage, STORAGE.snowflake);
+    let dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Report on Invoice?')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('combobox', { name: 'Storage' })).toHaveValue(STORAGE.bigquery);
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Storage' }), STORAGE.snowflake);
+    dialog = await screen.findByRole('alertdialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove and continue' }));
+    expect(await screen.findByText('1 row = 1 Invoice')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Storage' })).toHaveValue(STORAGE.snowflake);
+    expect(screen.getByRole('combobox', { name: 'Report on' })).toHaveTextContent('Invoice');
+  });
+
+  it.each([
+    ['storages', '/api/data-storages'],
+    ['data marts of a storage', '/api/model-canvas/data-marts'],
+  ])('falls back to every reportable data mart when the %s fail to load', async (_what, path) => {
+    __mock.fail(path, { code: 'HTTP_ERROR', status: 403, message: 'Forbidden' });
+    renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Data mart' }));
+    expect(screen.queryByRole('combobox', { name: 'Storage' })).not.toBeInTheDocument();
+    expect(optionTitles(screen.getByRole('listbox', { name: 'Data mart' }))).toEqual([
+      'Contact', 'Invoice', 'Page', 'Pageview', 'Session', 'User', 'Visitor',
+    ]);
+    await userEvent.click(screen.getByRole('option', { name: 'Visitor' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await screen.findByTestId('columnPanel');
+    expect(screen.queryByRole('combobox', { name: 'Storage' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('combobox', { name: 'Report on' }));
+    expect(optionTitles(screen.getByRole('listbox', { name: 'Report on' }))).toContain('Invoice');
+  });
+
+  it('says when no data mart is available for reports', async () => {
+    const services = await mockServices();
+    services.api = { ...services.api, listDataMarts: async () => [] };
+    renderWithServices(<EditorPage onBack={vi.fn()} />, services);
+    expect(await screen.findByText('No published data marts available for reports')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+  });
 });
 
 it('blocks Apply and explains when a saved column no longer exists', async () => {
@@ -139,7 +231,7 @@ it('blocks Apply and explains when a saved column no longer exists', async () =>
 it('shows a schema failure with a retry instead of a blank screen', async () => {
   __mock.fail(`/api/data-marts/${DM.visitor}/blendable-schema`, { code: 'HTTP_ERROR', status: 500, message: 'boom' });
   renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
-  await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+  await pickMart('Data mart', 'Visitor');
   await userEvent.click(screen.getByRole('button', { name: 'Start' }));
   expect(await screen.findByText("Couldn't load Visitor")).toBeInTheDocument();
   __mock.clearFailures();
@@ -199,7 +291,7 @@ it('offers another data mart when the saved one is no longer available', async (
   });
   renderWithServices(<EditorPage reportId='lost' onBack={vi.fn()} />, await mockServices());
   expect(await screen.findByText("This report's data mart is no longer available for reports.")).toBeInTheDocument();
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Data mart' }), DM.visitor);
+  await pickMart('Data mart', 'Visitor');
   await userEvent.click(screen.getByRole('button', { name: 'Use this data mart' }));
   expect(await screen.findByTestId('columnPanel')).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: 'Report title' })).toHaveValue('Lost');
@@ -222,7 +314,7 @@ it('mounts the column panel only in the side sheet on narrow screens', async () 
   );
   try {
     renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+    await pickMart('Data mart', 'Visitor');
     await userEvent.click(screen.getByRole('button', { name: 'Start' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Columns' }));
     expect(await screen.findAllByTestId('columnPanel')).toHaveLength(1);
@@ -278,7 +370,7 @@ describe('saving a report linked to Google Sheets', () => {
 
   it('unlinks the Google Sheets report instead of updating it when the main data mart changed', async () => {
     await openLinked();
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Report on' }), DM.session);
+    await pickMart('Report on', 'Session');
     const confirm = await screen.findByRole('alertdialog');
     await userEvent.click(within(confirm).getByRole('button', { name: 'Remove and continue' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Save and update Google Sheets' }));
@@ -311,7 +403,7 @@ describe('going back', () => {
   it('asks before discarding unsaved changes', async () => {
     const onBack = vi.fn();
     renderWithServices(<EditorPage onBack={onBack} />, await mockServices());
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Data mart' }), DM.visitor);
+    await pickMart('Data mart', 'Visitor');
     await userEvent.click(screen.getByRole('button', { name: 'Start' }));
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Email (Visitor)' }));
     await userEvent.click(screen.getByRole('button', { name: 'Back to reports' }));

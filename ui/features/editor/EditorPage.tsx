@@ -12,6 +12,7 @@ import { Sheet as SidePanel, SheetContent, SheetHeader, SheetTitle } from '@owox
 import { Skeleton } from '@owox/ui/components/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@owox/ui/components/tabs';
 import { useServices } from '../../services';
+import { DataMartPicker } from '../../components/DataMartPicker';
 import { NativeSelect } from '../../components/NativeSelect';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import type { DataMartSummary } from '../../lib/odm-types';
@@ -22,6 +23,7 @@ import {
   setSort, upsertFilter, type DateChoice, type RemapResult, type ReportDraft,
 } from '../../lib/report-draft';
 import { configHash } from '../../lib/report-store';
+import { groupByStorage, loadStorageMembership, type StorageCatalog, type StorageMembership } from '../../lib/storages';
 import type { SchemaIndex } from '../../lib/schema-index';
 import { ColumnPanel } from '../column-panel/ColumnPanel';
 import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
@@ -57,6 +59,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const doc = useReportDocument(reportId);
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
   const [martsError, setMartsError] = useState<UserFacingError | null>(null);
+  /** undefined while loading; null when storages couldn't be loaded, which falls back to one flat list. */
+  const [membership, setMembership] = useState<StorageMembership | null | undefined>(undefined);
+  const [startStorageId, setStartStorageId] = useState('');
   const [startId, setStartId] = useState('');
   const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
   const [pendingRemap, setPendingRemap] = useState<PendingRemap | null>(null);
@@ -83,17 +88,24 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   useEffect(() => {
     let alive = true;
     api.listDataMarts().then(
-      (list) => {
-        if (!alive) return;
-        setMarts(list);
-        setStartId((current) => current || list[0]?.id || '');
-      },
+      (list) => alive && setMarts(list),
       (error) => alive && setMartsError(describeError(error, 'data marts')),
+    );
+    loadStorageMembership(api).then(
+      (loaded) => alive && setMembership(loaded),
+      () => alive && setMembership(null),
     );
     return () => {
       alive = false;
     };
   }, [api]);
+
+  const catalog = useMemo((): StorageCatalog | null => {
+    if (!marts || !membership) return null;
+    const grouped = groupByStorage(membership.storages, membership.martIdsByStorage, marts);
+    // Never hide a data mart: unless every reportable one has a storage, keep the flat list.
+    return grouped.groups.length > 0 && grouped.unassigned.length === 0 ? grouped : null;
+  }, [marts, membership]);
 
   const draft = doc.draft;
   const mainMart = useMemo(() => marts?.find((m) => m.id === draft?.mainDataMartId), [marts, draft?.mainDataMartId]);
@@ -262,7 +274,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     </header>
   );
 
-  if (doc.status === 'loading' || (!marts && !martsError)) {
+  if (doc.status === 'loading' || (!martsError && (!marts || membership === undefined))) {
     return (
       <div className='dm-page' data-testid='editorPage'>
         {header}
@@ -304,27 +316,55 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     );
   }
 
+  // The start choice: a storage (when known), then one of its reportable data marts.
+  const startGroup = catalog?.groups.find((g) => g.storage.id === startStorageId) ?? catalog?.groups[0];
+  const startMarts = startGroup?.marts ?? marts ?? [];
+  const startMartId = startMarts.some((m) => m.id === startId) ? startId : (startMarts[0]?.id ?? '');
+  const startPicker = (action: string, variant: 'default' | 'outline') => (
+    <div className='flex w-full max-w-sm flex-col gap-2 text-left'>
+      {catalog && startGroup && (
+        <NativeSelect
+          aria-label='Storage'
+          value={startGroup.storage.id}
+          onChange={(e) => {
+            setStartStorageId(e.target.value);
+            setStartId('');
+          }}
+        >
+          {catalog.groups.map((g) => (
+            <option key={g.storage.id} value={g.storage.id}>
+              {g.storage.title}
+            </option>
+          ))}
+        </NativeSelect>
+      )}
+      <div className='flex min-w-0 items-center gap-2'>
+        <DataMartPicker label='Data mart' marts={startMarts} value={startMartId} onChange={setStartId} />
+        <Button variant={variant} disabled={!startMartId} onClick={() => doc.setDraft(emptyDraft(startMartId))}>
+          {action}
+        </Button>
+      </div>
+    </div>
+  );
+
   if (!draft) {
     return (
       <div className='dm-page' data-testid='editorPage'>
         {header}
-        <div className='dm-empty-state'>
-          <Columns3 className='dm-empty-state-ico' />
-          <h2 className='dm-empty-state-title'>Choose the data mart your report is about</h2>
-          <p className='dm-empty-state-subtitle'>Each row of the report is one row of this data mart. You can add columns from its joinable data marts next.</p>
-          <div className='flex w-full max-w-sm items-center gap-2'>
-            <NativeSelect aria-label='Data mart' value={startId} onChange={(e) => setStartId(e.target.value)}>
-              {marts!.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.title}
-                </option>
-              ))}
-            </NativeSelect>
-            <Button disabled={!startId} onClick={() => doc.setDraft(emptyDraft(startId))}>
-              Start
-            </Button>
+        {startMarts.length === 0 ? (
+          <div className='dm-empty-state'>
+            <Columns3 className='dm-empty-state-ico' />
+            <h2 className='dm-empty-state-title'>No published data marts available for reports</h2>
+            <p className='dm-empty-state-subtitle'>Publish a data mart and make it available for reports in OWOX Data Marts, then come back.</p>
           </div>
-        </div>
+        ) : (
+          <div className='dm-empty-state'>
+            <Columns3 className='dm-empty-state-ico' />
+            <h2 className='dm-empty-state-title'>Choose the data mart your report is about</h2>
+            <p className='dm-empty-state-subtitle'>Each row of the report is one row of this data mart. You can add columns from its joinable data marts next.</p>
+            {startPicker('Start', 'default')}
+          </div>
+        )}
       </div>
     );
   }
@@ -338,18 +378,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
             <AlertTitle>This report's data mart is no longer available for reports.</AlertTitle>
             <AlertDescription>
               <p>It may have been unpublished or hidden from reports. Pick another data mart to start this report again — its columns can't be carried over.</p>
-              <div className='mt-2 flex w-full max-w-sm items-center gap-2'>
-                <NativeSelect aria-label='Data mart' value={startId} onChange={(e) => setStartId(e.target.value)}>
-                  {marts!.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title}
-                    </option>
-                  ))}
-                </NativeSelect>
-                <Button variant='outline' disabled={!startId} onClick={() => doc.setDraft(emptyDraft(startId))}>
-                  Use this data mart
-                </Button>
-              </div>
+              <div className='mt-2'>{startPicker('Use this data mart', 'outline')}</div>
             </AlertDescription>
           </Alert>
         </div>
@@ -397,12 +426,22 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     if (narrow) setPanelOpen(true);
   };
 
+  // The sidebar offers the main data mart's storage; nothing is reachable across storages.
+  const mainGroup = catalog?.groups.find((g) => g.storage.id === catalog.storageOf(draft.mainDataMartId));
+  const changeStorage = (storageId: string) => {
+    const first = catalog?.groups.find((g) => g.storage.id === storageId)?.marts[0];
+    if (first) void changeMain(first.id);
+  };
+
   const panel = (
     <ColumnPanel
       index={index}
       graph={graph}
       draft={draft}
-      marts={marts!}
+      marts={mainGroup?.marts ?? marts!}
+      storages={mainGroup ? catalog!.groups.map((g) => g.storage) : null}
+      storageId={mainGroup?.storage.id}
+      onChangeStorage={changeStorage}
       filterRequest={filterRequest}
       onToggleField={toggleField}
       onChangeInstancePath={changePath}
