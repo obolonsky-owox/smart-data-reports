@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowLeft, Columns3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, Save, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
@@ -66,6 +66,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const [startId, setStartId] = useState('');
   const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
   const [pendingRemap, setPendingRemap] = useState<PendingRemap | null>(null);
+  /** The control that started the change being confirmed; the confirmation hands the focus back to it. */
+  const remapOrigin = useRef<HTMLElement | null>(null);
   const [filterRequest, setFilterRequest] = useState<{ field: string; nonce: number } | null>(null);
   const [sheets, setSheets] = useState<'create' | 'update' | null>(null);
   const [tab, setTab] = useState('table');
@@ -124,6 +126,12 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const mainDataMartId = draft?.mainDataMartId;
   const resetQuery = query.reset;
   useLayoutEffect(() => resetQuery(), [mainDataMartId, resetQuery]);
+  // So does a filter request from the table: the new data mart may not have that field.
+  const [filterRequestMain, setFilterRequestMain] = useState(mainDataMartId);
+  if (filterRequestMain !== mainDataMartId) {
+    setFilterRequestMain(mainDataMartId);
+    setFilterRequest(null);
+  }
 
   const edit = useCallback(
     (fn: (d: ReportDraft, i: SchemaIndex) => ReportDraft) => {
@@ -151,14 +159,20 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     if (result.dateChoice) setDateChoice(result.dateChoice);
   }
 
-  async function changeMain(dataMartId: string) {
+  /** `origin` defaults to the focused control; a popover's trigger only gets the focus back after a tick. */
+  function confirmRemap(remap: PendingRemap, origin?: HTMLElement | null) {
+    remapOrigin.current = origin ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setPendingRemap(remap);
+  }
+
+  async function changeMain(dataMartId: string, origin?: HTMLElement | null) {
     if (!draft || !index || dataMartId === draft.mainDataMartId) return;
     const mart = marts?.find((m) => m.id === dataMartId);
     if (!mart) return;
     try {
       const loaded = await schema.load(mart);
       const result = rebaseOnMain(draft, index, loaded.index);
-      if (result.dropped.length) setPendingRemap({ title: `Report on ${mart.title}?`, result, labels: labelsOf(result.dropped, index) });
+      if (result.dropped.length) confirmRemap({ title: `Report on ${mart.title}?`, result, labels: labelsOf(result.dropped, index) }, origin);
       else doc.setDraft(result.draft);
     } catch (error) {
       toast.error(describeError(error, mart.title).message);
@@ -168,7 +182,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   function changePath(from: string, to: string) {
     if (!draft || !index) return;
     const result = changeInstancePath(draft, index, from, to);
-    if (result.dropped.length) setPendingRemap({ title: 'Change the join path?', result, labels: labelsOf(result.dropped, index) });
+    if (result.dropped.length) confirmRemap({ title: 'Change the join path?', result, labels: labelsOf(result.dropped, index) });
     else doc.setDraft(result.draft);
   }
 
@@ -462,7 +476,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onMoveColumn={(from, to) => edit((d) => moveColumn(d, from, to))}
       onRemoveColumn={(name) => edit((d) => removeColumn(d, name))}
       onPendingFilterDone={() => setFilterRequest(null)}
-      onChangeMain={(id) => void changeMain(id)}
+      onChangeMain={(id, origin) => void changeMain(id, origin)}
       onApply={apply}
       applyDisabled={!index || issues.length > 0 || (query.state.status === 'success' && !stale)}
       applying={query.state.status === 'running'}
@@ -563,7 +577,16 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       )}
 
       <AlertDialog open={!!pendingRemap} onOpenChange={(open) => !open && setPendingRemap(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            // Opened from code, the dialog has no trigger to return to and would leave the focus on the page.
+            const origin = remapOrigin.current;
+            remapOrigin.current = null;
+            if (!origin?.isConnected) return;
+            event.preventDefault();
+            origin.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{pendingRemap?.title}</AlertDialogTitle>
             <AlertDialogDescription>These can't be kept and will be removed: {pendingRemap?.labels.join(', ')}.</AlertDialogDescription>

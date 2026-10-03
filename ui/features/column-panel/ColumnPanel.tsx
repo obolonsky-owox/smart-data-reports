@@ -26,7 +26,8 @@ export interface ColumnPanelProps
   /** The main data mart's storage. */
   storageId: string | undefined;
   onChangeStorage(storageId: string): void;
-  onChangeMain(dataMartId: string): void;
+  /** `origin` is the control the change came from; a confirmation returns the focus to it. */
+  onChangeMain(dataMartId: string, origin: HTMLElement | null): void;
   onApply(): void;
   applyDisabled: boolean;
   applying: boolean;
@@ -37,6 +38,13 @@ export function ColumnPanel(props: ColumnPanelProps) {
   const { index, graph, draft, marts, filterRequest } = props;
   const [tab, setTab] = useState(filterRequest ? 'selected' : 'all');
   const [pendingFilterField, setPendingFilterField] = useState<string | null>(filterRequest?.field ?? null);
+  // The panel outlives a main data mart change, but a pending filter belongs to the previous one.
+  const [pendingMain, setPendingMain] = useState(draft.mainDataMartId);
+  if (pendingMain !== draft.mainDataMartId) {
+    setPendingMain(draft.mainDataMartId);
+    setPendingFilterField(null);
+  }
+  const pendingField = pendingFilterField && index?.fields.has(pendingFilterField) ? pendingFilterField : null;
   const mainTitle = index?.instances.get('')!.title ?? marts.find((m) => m.id === draft.mainDataMartId)?.title;
 
   useEffect(() => {
@@ -80,7 +88,7 @@ export function ColumnPanel(props: ColumnPanelProps) {
             <SelectedTab
               {...props}
               index={index}
-              pendingFilterField={pendingFilterField}
+              pendingFilterField={pendingField}
               onPendingFilterDone={() => {
                 setPendingFilterField(null);
                 props.onPendingFilterDone();

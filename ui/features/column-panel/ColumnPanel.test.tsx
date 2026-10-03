@@ -1,8 +1,9 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DATA_MARTS, DM, STORAGE, STORAGES, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
+import { DATA_MARTS, DM, GRAPHS, SESSION_SCHEMA, STORAGE, STORAGES, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
 import { buildSchemaIndex } from '../../lib/schema-index';
 import { emptyDraft } from '../../lib/report-draft';
+import { TooltipProvider } from '@owox/ui/components/tooltip';
 import { renderUi } from '../../test/render';
 import { ColumnPanel } from './ColumnPanel';
 
@@ -18,8 +19,8 @@ function setup(overrides: Partial<Parameters<typeof ColumnPanel>[0]> = {}) {
     onChangeMain: vi.fn(), onApply: vi.fn(), applyDisabled: false, applying: false, issues: [],
     ...overrides,
   };
-  renderUi(<ColumnPanel {...props} />);
-  return props;
+  const { rerender } = renderUi(<ColumnPanel {...props} />);
+  return { ...props, rerender: (next: Partial<typeof props>) => rerender(<TooltipProvider><ColumnPanel {...props} {...next} /></TooltipProvider>) };
 }
 
 it('shows the grain and changes the main data mart', async () => {
@@ -30,7 +31,7 @@ it('shows the grain and changes the main data mart', async () => {
   await userEvent.click(reportOn);
   await userEvent.type(screen.getByRole('textbox', { name: 'Search data marts' }), 'sess');
   await userEvent.click(screen.getByRole('option', { name: 'Session' }));
-  expect(props.onChangeMain).toHaveBeenCalledWith(DM.session);
+  expect(props.onChangeMain).toHaveBeenCalledWith(DM.session, reportOn);
 });
 
 it('shows the storage above Report on and reports a storage change', async () => {
@@ -67,4 +68,31 @@ it('keeps the data mart choice while the schema loads and shows a placeholder fo
   expect(screen.getByText('1 row = 1 Session')).toBeInTheDocument();
   expect(screen.getByRole('status', { name: 'Loading fields' })).toBeInTheDocument();
   expect(screen.queryByRole('tab', { name: 'All' })).not.toBeInTheDocument();
+});
+
+it('drops a pending filter when the main data mart changes', async () => {
+  const filterRequest = { field: 'email', nonce: 1 };
+  const { rerender } = setup({ filterRequest });
+  expect(screen.getByRole('form', { name: 'Filter Email' })).toBeInTheDocument();
+  rerender({
+    filterRequest,
+    draft: emptyDraft(DM.session),
+    index: buildSchemaIndex({ id: DM.session, title: 'Session' }, SESSION_SCHEMA),
+    graph: GRAPHS[DM.session]!,
+  });
+  expect(screen.getByText('1 row = 1 Session')).toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: /^Filter / })).not.toBeInTheDocument();
+  // The stale request no longer shadows a new filter.
+  await userEvent.click(within(screen.getByRole('region', { name: 'Filters' })).getByRole('button', { name: 'Filter' }));
+  const pick = within(await screen.findByRole('dialog')).getAllByRole('button')[0]!;
+  const label = pick.firstChild!.textContent!;
+  await userEvent.click(pick);
+  expect(screen.getByRole('form', { name: `Filter ${label}` })).toBeInTheDocument();
+});
+
+it('ignores a filter request for a field the data mart lacks', async () => {
+  setup({ filterRequest: { field: 'gone_field', nonce: 1 } });
+  await userEvent.click(within(screen.getByRole('region', { name: 'Filters' })).getByRole('button', { name: 'Filter' }));
+  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^Client ID/ }));
+  expect(screen.getByRole('form', { name: 'Filter Client ID' })).toBeInTheDocument();
 });

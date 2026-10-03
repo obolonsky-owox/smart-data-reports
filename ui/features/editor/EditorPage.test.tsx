@@ -135,6 +135,38 @@ it('cancels the running query and clears the result when the main data mart chan
   expect(signal?.aborted).toBe(true);
 });
 
+describe('changing the main data mart', () => {
+  it('returns the focus to Report on after confirming a change that drops columns', async () => {
+    await startVisitorReport();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+    await pickMart('Report on', 'Session');
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove and continue' }));
+    expect(await screen.findByText('1 row = 1 Session')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Report on' })).toHaveFocus());
+  });
+
+  it('drops a pending filter request for a field of the previous data mart', async () => {
+    await startVisitorReport();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+    await userEvent.click(screen.getByTestId('apply'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Column options for Email' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Filter…' }));
+    expect(await screen.findByRole('form', { name: 'Filter Email' })).toBeInTheDocument();
+
+    await pickMart('Report on', 'Session');
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove and continue' }));
+    await screen.findByText('1 row = 1 Session');
+    expect(screen.queryByRole('form', { name: /^Filter / })).not.toBeInTheDocument();
+
+    // A new filter on the new data mart opens its editor; the old request no longer shadows it.
+    await userEvent.click(within(screen.getByRole('region', { name: 'Filters' })).getByRole('button', { name: 'Filter' }));
+    const pick = within(await screen.findByRole('dialog')).getAllByRole('button')[0]!;
+    const label = pick.firstChild!.textContent!;
+    await userEvent.click(pick);
+    expect(screen.getByRole('form', { name: `Filter ${label}` })).toBeInTheDocument();
+  });
+});
+
 describe('storages', () => {
   it('filters the start screen by storage and searches the data marts', async () => {
     renderWithServices(<EditorPage onBack={vi.fn()} />, await mockServices());
@@ -190,6 +222,7 @@ describe('storages', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove and continue' }));
     expect(await screen.findByText('1 row = 1 Invoice')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Storage' })).toHaveValue(STORAGE.snowflake);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Storage' })).toHaveFocus());
     expect(screen.getByRole('combobox', { name: 'Report on' })).toHaveTextContent('Invoice');
   });
 

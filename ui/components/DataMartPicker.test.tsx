@@ -30,7 +30,7 @@ it('filters by a case-insensitive substring of the title and picks with a click'
   await userEvent.type(screen.getByRole('textbox', { name: 'Search data marts' }), 'SESS');
   expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Session']);
   await userEvent.click(screen.getByRole('option', { name: 'Session' }));
-  expect(onChange).toHaveBeenCalledWith(DM.session);
+  expect(onChange).toHaveBeenCalledWith(DM.session, trigger);
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 });
 
@@ -52,7 +52,7 @@ it('moves through the list with the arrow keys and picks with Enter', async () =
   const third = marts[3]!;
   expect(search).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: third.title }).id);
   await userEvent.keyboard('{Enter}');
-  expect(onChange).toHaveBeenCalledWith(third.id);
+  expect(onChange).toHaveBeenCalledWith(third.id, trigger);
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
 });

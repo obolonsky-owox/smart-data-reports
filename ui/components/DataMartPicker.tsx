@@ -10,7 +10,8 @@ export interface DataMartPickerProps {
   label: string;
   marts: Pick<DataMartSummary, 'id' | 'title'>[];
   value: string;
-  onChange(dataMartId: string): void;
+  /** `trigger` is the picker's button, where the focus returns once the list has closed. */
+  onChange(dataMartId: string, trigger: HTMLButtonElement | null): void;
   className?: string;
 }
 
@@ -20,6 +21,7 @@ export function DataMartPicker({ label, marts, value, onChange, className }: Dat
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
 
   const needle = query.trim().toLowerCase();
@@ -38,7 +40,7 @@ export function DataMartPicker({ label, marts, value, onChange, className }: Dat
 
   function pick(dataMartId: string) {
     setOpen(false);
-    if (dataMartId !== value) onChange(dataMartId);
+    if (dataMartId !== value) onChange(dataMartId, triggerRef.current);
   }
 
   // Runs whenever another option becomes active, including when the portaled list first mounts.
@@ -61,6 +63,7 @@ export function DataMartPicker({ label, marts, value, onChange, className }: Dat
     <Popover modal open={open} onOpenChange={changeOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type='button'
           role='combobox'
           aria-label={label}
