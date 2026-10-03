@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { TriangleAlert } from 'lucide-react';
-import { Badge } from '@owox/ui/components/badge';
 import { Button } from '@owox/ui/components/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@owox/ui/components/dialog';
 import { cn } from '@owox/ui/lib/utils';
@@ -59,12 +57,6 @@ export function PathDialog({ title, description, index, mainTitle, instances, in
                         {h.label}: {h.joinDescription}
                       </span>
                     ))}
-                  {instance.grain === 'multiplies' && (
-                    <Badge variant='outline' className='w-fit border-warning text-warning'>
-                      <TriangleAlert className='h-3 w-3' />
-                      Multiplies rows
-                    </Badge>
-                  )}
                 </span>
               </label>
             );

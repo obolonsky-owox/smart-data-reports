@@ -74,7 +74,7 @@ it('asks for the join path when a data mart is reachable in more than one way', 
   expect(within(dialog).getByText('Visitor → Landing page')).toBeInTheDocument();
   expect(within(dialog).getByText('Visitor → Session → Pageview → Page')).toBeInTheDocument();
   expect(within(dialog).getByText('Landing page: The first page the visitor landed on.')).toBeInTheDocument();
-  expect(within(dialog).getByText('Multiplies rows')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/multipl|×N/i)).not.toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole('radio', { name: 'Visitor → Landing page' }));
   await userEvent.click(within(dialog).getByRole('button', { name: 'Use this path' }));
   expect(columns()).toBe('landing_page__title');
@@ -325,8 +325,7 @@ it('previews the join path when hovering the path chip', async () => {
   expect([...tooltip.querySelectorAll('[data-slot="join-path-node"]')].map((n) => n.textContent)).toEqual(['Visitor', 'Session', 'Pageview', 'Page']);
   expect(within(tooltip).getByText('session_id = session_id')).toBeInTheDocument();
   expect(within(tooltip).getByText('page_id = id')).toBeInTheDocument();
-  // Rows multiply where sessions join in; the hops after it inherit that grain.
-  expect(within(tooltip).getAllByText('×N')).toHaveLength(1);
+  expect(within(tooltip).queryByText(/×N|\?/)).not.toBeInTheDocument();
   expect(within(tooltip).getByText('Session: Sessions of the visitor.')).toBeInTheDocument();
   expect(within(tooltip).getByText('Pageview: Pages viewed in the session.')).toBeInTheDocument();
   expect(within(tooltip).getByText('Page: The page that was viewed.')).toBeInTheDocument();

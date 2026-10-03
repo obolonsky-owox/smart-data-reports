@@ -20,8 +20,7 @@ type InstanceNodeData = { [K in keyof CanvasNode]: CanvasNode[K] } & {
   onSetMain(dataMartId: string): void;
   onDelete(path: AliasPath): void;
 };
-/** `multiplies` is true on the hop where rows start to multiply (grain is cumulative along a path). */
-type JoinEdgeData = Pick<CanvasEdge, 'keys' | 'grain'> & { multiplies: boolean };
+type JoinEdgeData = Pick<CanvasEdge, 'keys'>;
 
 const nodeId = (path: AliasPath) => path || '__main__';
 
@@ -49,44 +48,45 @@ function InstanceNode({ data, selected }: NodeProps<Node<InstanceNodeData>>) {
   );
 }
 
-function JoinEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }: EdgeProps<Edge<JoinEdgeData>>) {
+/** The join keys of one edge, one `source = target` line per condition. */
+export function JoinEdgeLabel({ keys }: { keys: string[] }) {
+  return (
+    <div
+      style={{
+        background: 'var(--background)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '3px 8px',
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1.5,
+        color: 'var(--foreground)',
+        boxShadow: '0 1px 3px 0 var(--border)',
+      }}
+    >
+      {keys.map((k, i) => <div key={`${i}-${k}`}>{k}</div>)}
+    </div>
+  );
+}
+
+function JoinEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<JoinEdgeData>>) {
   // An SVG reference must be a plain fragment id.
   const markerId = `join-arrow-${useId().replace(/[^\w-]/g, '')}-${id.replace(/[^\w-]/g, '')}`;
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
-  const multiplies = !!data?.multiplies;
-  const stroke = multiplies ? 'var(--warning)' : selected ? 'var(--primary)' : 'var(--muted-foreground)';
   return (
     <>
       <defs>
         <marker id={markerId} markerWidth='9' markerHeight='9' refX='7' refY='3' orient='auto' markerUnits='strokeWidth'>
-          <path d='M0,0 L7,3 L0,6 z' fill={stroke} />
+          <path d='M0,0 L7,3 L0,6 z' fill='var(--muted-foreground)' />
         </marker>
       </defs>
-      <BaseEdge
-        id={id}
-        path={path}
-        markerEnd={`url(#${markerId})`}
-        style={{ stroke, strokeWidth: selected ? 2.5 : 1.5, strokeDasharray: multiplies ? '8 4' : undefined }}
-      />
+      <BaseEdge id={id} path={path} markerEnd={`url(#${markerId})`} style={{ stroke: 'var(--muted-foreground)', strokeWidth: 1.5 }} />
       <EdgeLabelRenderer>
         <div
           className='nodrag nopan pointer-events-none absolute w-max'
-          style={{
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            background: 'var(--background)',
-            border: `1px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
-            borderRadius: 8,
-            padding: '3px 8px',
-            fontSize: 11,
-            fontWeight: 600,
-            lineHeight: 1.5,
-            color: 'var(--foreground)',
-            boxShadow: '0 1px 3px 0 var(--border)',
-          }}
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
         >
-          {data?.keys.map((k, i) => <div key={`${i}-${k}`}>{k}</div>)}
-          {multiplies && <div style={{ color: 'var(--warning)' }}>×N</div>}
-          {data?.grain === 'unknown' && <div className='text-muted-foreground'>?</div>}
+          <JoinEdgeLabel keys={data?.keys ?? []} />
         </div>
       </EdgeLabelRenderer>
     </>
@@ -157,11 +157,7 @@ function CanvasFlow({ index, graph, draft, theme, onAddObject, onSetMain, onDele
     type: 'join',
     source: nodeId(e.source),
     target: nodeId(e.target),
-    data: {
-      keys: e.keys,
-      grain: e.grain,
-      multiplies: e.grain === 'multiplies' && (!e.source || index.instances.get(e.source)?.grain !== 'multiplies'),
-    },
+    data: { keys: e.keys },
   }));
 
   return (

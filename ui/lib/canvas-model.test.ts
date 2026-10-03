@@ -27,10 +27,10 @@ it('marks instances that only carry the path as transit', () => {
   expect(kinds).toEqual({ '': 'main', sessions: 'transit', 'sessions.pageviews': 'transit', 'sessions.pageviews.page': 'used' });
 });
 
-it('labels edges with join keys and grain', () => {
+it('labels edges with join keys only', () => {
   const draft = includePath(emptyDraft(DM.visitor), 'sessions.pageviews');
   const edge = buildCanvasModel(index, VISITOR_GRAPH, draft).edges.find((e) => e.target === 'sessions.pageviews')!;
-  expect(edge).toMatchObject({ source: 'sessions', keys: ['session_id = session_id', 'client_id = client_id'], grain: 'multiplies' });
+  expect(edge).toEqual({ id: 'sessions->sessions.pageviews', source: 'sessions', target: 'sessions.pageviews', keys: ['session_id = session_id', 'client_id = client_id'] });
 });
 
 it('carries the descriptions for the node tooltip', () => {

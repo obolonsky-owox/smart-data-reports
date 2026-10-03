@@ -60,14 +60,6 @@ describe('buildSchemaIndex', () => {
     expect(restricted.instances.has('contact.user')).toBe(false);
     expect(restricted.fields.has('contact_user__creation_source')).toBe(false);
   });
-
-  it('reads a missing grain verdict as unknown', () => {
-    const schema = {
-      ...VISITOR_SCHEMA,
-      availableSources: VISITOR_SCHEMA.availableSources.map(({ mainGrainMultiplication: _drop, ...s }) => s),
-    };
-    expect(buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, schema).instances.get('contact')?.grain).toBe('unknown');
-  });
 });
 
 describe('navigation helpers', () => {

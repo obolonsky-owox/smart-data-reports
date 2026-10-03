@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import type { MainGrainMultiplication, RelationshipGraph } from './odm-types';
+import type { RelationshipGraph } from './odm-types';
 import { usedInstances, type ReportDraft } from './report-draft';
 import { isSameOrDescendant, parentPath, type AliasPath, type SchemaIndex } from './schema-index';
 
@@ -25,7 +25,6 @@ export interface CanvasEdge {
   source: AliasPath;
   target: AliasPath;
   keys: string[];
-  grain: MainGrainMultiplication;
 }
 
 export interface CanvasModel { nodes: CanvasNode[]; edges: CanvasEdge[] }
@@ -93,7 +92,6 @@ export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, d
       source: parentPath(path),
       target: path,
       keys: keysByPath.get(path) ?? [],
-      grain: index.instances.get(path)!.grain,
     }));
 
   return { nodes, edges };

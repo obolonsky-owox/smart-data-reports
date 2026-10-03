@@ -1,4 +1,4 @@
-import type { MainGrainMultiplication, RelationshipGraph } from './odm-types';
+import type { RelationshipGraph } from './odm-types';
 import { chain, type AliasPath, type SchemaIndex } from './schema-index';
 
 export interface JoinPathNode {
@@ -10,8 +10,6 @@ export interface JoinPathHop {
   /** One `source = target` line per join condition. */
   keys: string[];
   description: string;
-  /** Row multiplication relative to the main data mart once this hop is joined (cumulative). */
-  grain: MainGrainMultiplication;
 }
 
 /** `hops[i]` joins `nodes[i]` to `nodes[i + 1]`. */
@@ -32,7 +30,6 @@ export function joinPath(index: SchemaIndex, graph: RelationshipGraph, aliasPath
       return {
         keys: relationship?.joinConditions.map((c) => `${c.sourceFieldName} = ${c.targetFieldName}`) ?? [],
         description: i.joinDescription || relationship?.description || '',
-        grain: i.grain,
       };
     }),
   };

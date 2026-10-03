@@ -18,8 +18,6 @@ export function JoinPathPreview({ path }: { path: JoinPath }) {
       <ol aria-label='Join path' className='flex flex-wrap items-center gap-y-2'>
         {path.nodes.map((node, i) => {
           const hop = i > 0 ? path.hops[i - 1] : undefined;
-          // Grain is cumulative, so mark only the hop where rows start to multiply.
-          const multiplies = hop?.grain === 'multiplies' && (i < 2 || path.hops[i - 2]!.grain !== 'multiplies');
           return (
             <li key={i} className='flex items-center'>
               {hop && (
@@ -32,11 +30,6 @@ export function JoinPathPreview({ path }: { path: JoinPath }) {
                   <svg className='h-2 w-full overflow-visible' aria-hidden='true'>
                     <line x1='0' y1='4' x2='100%' y2='4' stroke='var(--muted-foreground)' strokeWidth='1.5' markerEnd={`url(#${markerId})`} />
                   </svg>
-                  {multiplies && (
-                    <span className='text-center text-[10px] font-semibold text-warning' title='Multiplies rows'>
-                      ×N
-                    </span>
-                  )}
                 </span>
               )}
               <span data-slot='join-path-node' className='flex items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm'>

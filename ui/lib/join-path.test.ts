@@ -14,13 +14,13 @@ it('lists the data marts from the main one to the target', () => {
   ]);
 });
 
-it('gives each hop its join keys, description and grain', () => {
+it('gives each hop its join keys, and description', () => {
   expect(joinPath(index, VISITOR_GRAPH, 'sessions.pageviews').hops).toEqual([
-    { keys: ['client_id = client_id'], description: 'Sessions of the visitor.', grain: 'multiplies' },
-    { keys: ['session_id = session_id', 'client_id = client_id'], description: 'Pages viewed in the session.', grain: 'multiplies' },
+    { keys: ['client_id = client_id'], description: 'Sessions of the visitor.' },
+    { keys: ['session_id = session_id', 'client_id = client_id'], description: 'Pages viewed in the session.' },
   ]);
   expect(joinPath(index, VISITOR_GRAPH, 'landing_page').hops).toEqual([
-    { keys: ['landing_page_id = id'], description: 'The first page the visitor landed on.', grain: 'none' },
+    { keys: ['landing_page_id = id'], description: 'The first page the visitor landed on.' },
   ]);
 });
 
@@ -34,7 +34,7 @@ it('falls back to the relationship description', () => {
 
 it('has no keys for a hop the graph does not know', () => {
   expect(joinPath(index, { rootDataMartId: DM.visitor, nodes: [] }, 'contact').hops).toEqual([
-    { keys: [], description: 'The contact this visitor was identified as.', grain: 'none' },
+    { keys: [], description: 'The contact this visitor was identified as.' },
   ]);
 });
 
