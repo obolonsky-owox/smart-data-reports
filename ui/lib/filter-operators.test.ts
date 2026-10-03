@@ -1,4 +1,4 @@
-import { coerceFilterValue, describeFilter, operatorsFor } from './filter-operators';
+import { coerceFilterValue, describeFilter, isFilterValueMissing, operatorsFor } from './filter-operators';
 
 it('offers operators by field kind', () => {
   expect(operatorsFor('text').map((o) => o.label)).toEqual([
@@ -38,4 +38,14 @@ it('uses the field kind to pick the operator label', () => {
   expect(describeFilter({ ...base, operator: 'neq', value: 42 }, 'number')).toBe('≠ 42');
   expect(describeFilter({ ...base, operator: 'eq', value: 'x' }, 'text')).toBe('is x');
   expect(describeFilter({ ...base, operator: 'eq', value: 'x' })).toBe('is x');
+});
+
+it('tells when an operator that takes a value has none', () => {
+  expect(isFilterValueMissing('none', undefined)).toBe(false);
+  expect(isFilterValueMissing('single', '')).toBe(true);
+  expect(isFilterValueMissing('single', 0)).toBe(false);
+  expect(isFilterValueMissing('list', [])).toBe(true);
+  expect(isFilterValueMissing('list', ['a'])).toBe(false);
+  expect(isFilterValueMissing('range', { from: 1, to: '' })).toBe(true);
+  expect(isFilterValueMissing('range', { from: 1, to: 5 })).toBe(false);
 });

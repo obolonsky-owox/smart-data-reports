@@ -1,4 +1,4 @@
-import type { AggregateFunction, BlendableSchema, MainGrainMultiplication, NativeField } from './odm-types';
+import type { AggregateFunction, BlendableSchema, NativeField } from './odm-types';
 
 /** '' is the main data mart; otherwise ODM's dotted relationship-alias path, e.g. 'sessions.pageviews'. */
 export type AliasPath = string;
@@ -27,7 +27,6 @@ export interface InstanceInfo {
   description: string;
   joinDescription: string;
   depth: number;
-  grain: MainGrainMultiplication;
   fields: FieldInfo[];
 }
 
@@ -96,7 +95,6 @@ export function buildSchemaIndex(main: { id: string; title: string }, schema: Bl
     description: schema.nativeDescription ?? '',
     joinDescription: '',
     depth: 0,
-    grain: 'none',
     fields: flattenNative(schema.nativeFields),
   });
 
@@ -119,7 +117,6 @@ export function buildSchemaIndex(main: { id: string; title: string }, schema: Bl
       description: source.description ?? '',
       joinDescription: source.joinDescription ?? '',
       depth: source.depth,
-      grain: source.mainGrainMultiplication ?? 'unknown',
       fields: [],
     });
   }

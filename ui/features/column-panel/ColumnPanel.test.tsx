@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DATA_MARTS, DM, VISITOR_SCHEMA } from '../../fixtures/smart-data';
+import { DATA_MARTS, DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
 import { buildSchemaIndex } from '../../lib/schema-index';
 import { emptyDraft } from '../../lib/report-draft';
 import { renderUi } from '../../test/render';
@@ -10,8 +10,8 @@ const index = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, VISITOR_SCH
 
 function setup(overrides: Partial<Parameters<typeof ColumnPanel>[0]> = {}) {
   const props = {
-    index, draft: emptyDraft(DM.visitor), marts: DATA_MARTS, filterRequest: null,
-    onToggleField: vi.fn(), onIncludePath: vi.fn(), onChangeInstancePath: vi.fn(), onAddFilter: vi.fn(),
+    index, graph: VISITOR_GRAPH, draft: emptyDraft(DM.visitor), marts: DATA_MARTS, filterRequest: null,
+    onToggleField: vi.fn(), onIncludePath: vi.fn(), onChangeInstancePath: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(),
     onSetDateRange: vi.fn(), onRemoveDateRange: vi.fn(), onUpsertFilter: vi.fn(), onRemoveFilter: vi.fn(),
     onMoveColumn: vi.fn(), onRemoveColumn: vi.fn(), onPendingFilterDone: vi.fn(),
     onChangeMain: vi.fn(), onApply: vi.fn(), applyDisabled: false, applying: false, issues: [],

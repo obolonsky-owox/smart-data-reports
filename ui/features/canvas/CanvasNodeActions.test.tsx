@@ -11,7 +11,7 @@ it('adds only objects joinable from the selected node', async () => {
   const onAddObject = vi.fn();
   renderUi(
     <CanvasNodeActions
-      node={{ path: 'sessions', label: 'Session', dataMartId: DM.session, kind: 'used', x: 0, y: 0 }}
+      node={{ path: 'sessions', label: 'Session', dataMartId: DM.session, description: '', joinDescription: '', kind: 'used', x: 0, y: 0 }}
       targets={childInstances(index, 'sessions')}
       onAddObject={onAddObject}
       onSetMain={vi.fn()}
@@ -25,7 +25,7 @@ it('adds only objects joinable from the selected node', async () => {
 
 it('cannot delete the main data mart or set it as main again', () => {
   renderUi(
-    <CanvasNodeActions node={{ path: '', label: 'Visitor', dataMartId: DM.visitor, kind: 'main', x: 0, y: 0 }} targets={[]} onAddObject={vi.fn()} onSetMain={vi.fn()} onDelete={vi.fn()} />,
+    <CanvasNodeActions node={{ path: '', label: 'Visitor', dataMartId: DM.visitor, description: '', joinDescription: '', kind: 'main', x: 0, y: 0 }} targets={[]} onAddObject={vi.fn()} onSetMain={vi.fn()} onDelete={vi.fn()} />,
   );
   expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Set as main' })).toBeDisabled();
@@ -36,7 +36,7 @@ it('sets another data mart as main and deletes an instance', async () => {
   const onSetMain = vi.fn();
   const onDelete = vi.fn();
   renderUi(
-    <CanvasNodeActions node={{ path: 'sessions', label: 'Session', dataMartId: DM.session, kind: 'used', x: 0, y: 0 }} targets={[]} onAddObject={vi.fn()} onSetMain={onSetMain} onDelete={onDelete} />,
+    <CanvasNodeActions node={{ path: 'sessions', label: 'Session', dataMartId: DM.session, description: '', joinDescription: '', kind: 'used', x: 0, y: 0 }} targets={[]} onAddObject={vi.fn()} onSetMain={onSetMain} onDelete={onDelete} />,
   );
   await userEvent.click(screen.getByRole('button', { name: 'Set as main' }));
   await userEvent.click(screen.getByRole('button', { name: 'Delete' }));

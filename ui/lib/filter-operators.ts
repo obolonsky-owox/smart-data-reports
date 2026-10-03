@@ -70,6 +70,18 @@ export function coerceFilterValue(
   return cast(String(raw).trim());
 }
 
+/** True when an operator that takes a value was given none: a blank value, an empty list or an open range. */
+export function isFilterValueMissing(input: OperatorOption['input'], value: unknown): boolean {
+  const blank = (v: unknown) => v === undefined || v === '';
+  if (input === 'none') return false;
+  if (input === 'list') return !Array.isArray(value) || value.length === 0;
+  if (input === 'range') {
+    const range = value as { from?: unknown; to?: unknown } | undefined;
+    return blank(range?.from) || blank(range?.to);
+  }
+  return blank(value);
+}
+
 export function describeFilter(filter: DraftFilter, kind?: FieldKind): string {
   const option = (kind ? operatorsFor(kind).find((o) => o.operator === filter.operator) : undefined) ?? operatorOption(filter.operator);
   const label = option?.label ?? filter.operator;

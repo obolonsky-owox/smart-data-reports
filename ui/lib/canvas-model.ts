@@ -1,15 +1,19 @@
 import dagre from '@dagrejs/dagre';
-import type { MainGrainMultiplication, RelationshipGraph } from './odm-types';
+import type { RelationshipGraph } from './odm-types';
 import { usedInstances, type ReportDraft } from './report-draft';
 import { isSameOrDescendant, parentPath, type AliasPath, type SchemaIndex } from './schema-index';
 
-export const NODE_WIDTH = 180;
-export const NODE_HEIGHT = 44;
+export const NODE_WIDTH = 240;
+export const NODE_HEIGHT = 52;
 
 export interface CanvasNode {
   path: AliasPath;
   label: string;
   dataMartId: string;
+  /** The data mart's description. */
+  description: string;
+  /** What the join into this instance means; empty for the main mart. */
+  joinDescription: string;
   kind: 'main' | 'used' | 'transit';
   /** Top-left corner, ready for React Flow. */
   x: number;
@@ -21,10 +25,16 @@ export interface CanvasEdge {
   source: AliasPath;
   target: AliasPath;
   keys: string[];
-  grain: MainGrainMultiplication;
 }
 
 export interface CanvasModel { nodes: CanvasNode[]; edges: CanvasEdge[] }
+
+/** Size of the join-key label box, measured the way ODM does. */
+function labelSize(lines: string[]) {
+  if (lines.length === 0) return {};
+  const maxChars = Math.max(...lines.map((l) => l.length));
+  return { width: maxChars * 6.6 + 18, height: lines.length * 16.5 + 8, labelpos: 'c' };
+}
 
 const MAIN_KEY = '__main__';
 const key = (path: AliasPath) => path || MAIN_KEY;
@@ -54,7 +64,10 @@ export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, d
   layout.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 140 });
   layout.setDefaultEdgeLabel(() => ({}));
   for (const path of paths) layout.setNode(key(path), { width: NODE_WIDTH, height: NODE_HEIGHT });
-  for (const path of paths) if (path) layout.setEdge(key(parentPath(path)), key(path));
+  // dagre reserves room for the join-key label on each edge, so labels do not overlap the nodes.
+  for (const path of paths) {
+    if (path) layout.setEdge(key(parentPath(path)), key(path), labelSize(keysByPath.get(path) ?? []));
+  }
   dagre.layout(layout);
 
   const nodes: CanvasNode[] = [...paths].map((path) => {
@@ -64,6 +77,8 @@ export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, d
       path,
       label: instance.label,
       dataMartId: instance.dataMartId,
+      description: instance.description,
+      joinDescription: instance.joinDescription,
       kind: path === '' ? 'main' : own.has(path) || leaves.includes(path) ? 'used' : 'transit',
       x: position.x - NODE_WIDTH / 2,
       y: position.y - NODE_HEIGHT / 2,
@@ -77,7 +92,6 @@ export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, d
       source: parentPath(path),
       target: path,
       keys: keysByPath.get(path) ?? [],
-      grain: index.instances.get(path)!.grain,
     }));
 
   return { nodes, edges };

@@ -3,9 +3,79 @@ import { Button } from '@owox/ui/components/button';
 import { Input } from '@owox/ui/components/input';
 import { Switch } from '@owox/ui/components/switch';
 import { NativeSelect } from '../../components/NativeSelect';
-import { coerceFilterValue, newFilterId, operatorsFor } from '../../lib/filter-operators';
+import { coerceFilterValue, newFilterId, operatorsFor, type OperatorOption } from '../../lib/filter-operators';
 import type { DraftFilter, FilterOperator } from '../../lib/report-draft';
 import type { FieldInfo } from '../../lib/schema-index';
+
+/** What the operator select and value inputs hold while a rule is being edited. */
+export interface RuleInput {
+  operator: FilterOperator | undefined;
+  single: string;
+  list: string;
+  range: { from: string; to: string };
+}
+
+export function ruleInputFor(field: FieldInfo, filter?: DraftFilter): RuleInput {
+  const value = filter?.value;
+  const range = (value as { from?: unknown; to?: unknown } | undefined) ?? {};
+  return {
+    operator: filter?.operator ?? operatorsFor(field.kind)[0]?.operator,
+    single: filter && !Array.isArray(value) && typeof value !== 'object' ? String(value ?? '') : '',
+    list: Array.isArray(value) ? (value as unknown[]).join('\n') : '',
+    range: { from: String(range.from ?? ''), to: String(range.to ?? '') },
+  };
+}
+
+/** The chosen operator and the value coerced for it, or undefined when the field has no such operator. */
+export function ruleFromInput(field: FieldInfo, input: RuleInput): { option: OperatorOption; value: unknown } | undefined {
+  const option = operatorsFor(field.kind).find((o) => o.operator === input.operator);
+  if (!option) return undefined;
+  const raw = option.input === 'range' ? input.range : option.input === 'list' ? input.list : input.single;
+  return { option, value: coerceFilterValue(field.kind, option.input, raw) };
+}
+
+/** Operator select plus the value inputs the operator needs. */
+export function FilterValueFields({ field, input, onChange }: { field: FieldInfo; input: RuleInput; onChange(next: RuleInput): void }) {
+  const options = operatorsFor(field.kind);
+  const option = options.find((o) => o.operator === input.operator);
+  return (
+    <>
+      <NativeSelect aria-label='Operator' value={input.operator} onChange={(e) => onChange({ ...input, operator: e.target.value as FilterOperator })}>
+        {options.map((o) => (
+          <option key={o.operator} value={o.operator}>
+            {o.label}
+          </option>
+        ))}
+      </NativeSelect>
+      {option?.input === 'single' && (
+        <Input
+          aria-label='Value'
+          className='h-8'
+          value={input.single}
+          inputMode={field.kind === 'number' ? 'decimal' : undefined}
+          onChange={(e) => onChange({ ...input, single: e.target.value })}
+        />
+      )}
+      {option?.input === 'list' && (
+        <textarea
+          aria-label='Values'
+          rows={3}
+          placeholder='One value per line or comma-separated'
+          className='rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30'
+          value={input.list}
+          onChange={(e) => onChange({ ...input, list: e.target.value })}
+        />
+      )}
+      {option?.input === 'range' && (
+        <div className='flex items-center gap-1'>
+          <Input aria-label='From' className='h-8' value={input.range.from} onChange={(e) => onChange({ ...input, range: { ...input.range, from: e.target.value } })} />
+          <span className='text-muted-foreground'>–</span>
+          <Input aria-label='To' className='h-8' value={input.range.to} onChange={(e) => onChange({ ...input, range: { ...input.range, to: e.target.value } })} />
+        </div>
+      )}
+    </>
+  );
+}
 
 interface FilterEditorProps {
   field: FieldInfo;
@@ -18,60 +88,28 @@ interface FilterEditorProps {
 }
 
 export function FilterEditor({ field, instanceLabel, mainTitle, isJoined, filter, onSave, onCancel }: FilterEditorProps) {
-  const options = operatorsFor(field.kind);
-  const [operator, setOperator] = useState<FilterOperator | undefined>(filter?.operator ?? options[0]?.operator);
-  const option = options.find((o) => o.operator === operator);
-  const initialRange = (filter?.value as { from?: unknown; to?: unknown } | undefined) ?? {};
-  const [single, setSingle] = useState(filter && !Array.isArray(filter.value) && typeof filter.value !== 'object' ? String(filter.value ?? '') : '');
-  const [list, setList] = useState(Array.isArray(filter?.value) ? (filter.value as unknown[]).join('\n') : '');
-  const [range, setRange] = useState({ from: String(initialRange.from ?? ''), to: String(initialRange.to ?? '') });
+  const [input, setInput] = useState(() => ruleInputFor(field, filter));
   const [sliceOnly, setSliceOnly] = useState(filter?.sliceOnly ?? false);
 
-  if (!option) return <p className='px-3 text-xs text-muted-foreground'>This field can't be filtered here.</p>;
+  const rule = ruleFromInput(field, input);
+  if (!rule) return <p className='px-3 text-xs text-muted-foreground'>This field can't be filtered here.</p>;
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!option) return;
-    const raw = option.input === 'range' ? range : option.input === 'list' ? list : single;
+    if (!rule) return;
     onSave({
       id: filter?.id ?? newFilterId(),
       column: field.name,
       aliasPath: field.aliasPath,
-      operator: option.operator,
-      value: coerceFilterValue(field.kind, option.input, raw),
+      operator: rule.option.operator,
+      value: rule.value,
       sliceOnly: isJoined && sliceOnly,
     });
   }
 
   return (
     <form aria-label={`Filter ${field.label}`} onSubmit={submit} className='flex flex-col gap-2 rounded-md border border-border bg-card p-3'>
-      <NativeSelect aria-label='Operator' value={operator} onChange={(e) => setOperator(e.target.value as FilterOperator)}>
-        {options.map((o) => (
-          <option key={o.operator} value={o.operator}>
-            {o.label}
-          </option>
-        ))}
-      </NativeSelect>
-      {option.input === 'single' && (
-        <Input aria-label='Value' className='h-8' value={single} inputMode={field.kind === 'number' ? 'decimal' : undefined} onChange={(e) => setSingle(e.target.value)} />
-      )}
-      {option.input === 'list' && (
-        <textarea
-          aria-label='Values'
-          rows={3}
-          placeholder='One value per line or comma-separated'
-          className='rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30'
-          value={list}
-          onChange={(e) => setList(e.target.value)}
-        />
-      )}
-      {option.input === 'range' && (
-        <div className='flex items-center gap-1'>
-          <Input aria-label='From' className='h-8' value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} />
-          <span className='text-muted-foreground'>–</span>
-          <Input aria-label='To' className='h-8' value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
-        </div>
-      )}
+      <FilterValueFields field={field} input={input} onChange={setInput} />
       {isJoined && (
         <label className='flex items-start gap-2 text-sm'>
           <Switch checked={sliceOnly} onCheckedChange={setSliceOnly} aria-label={`Only narrow ${instanceLabel}`} />
