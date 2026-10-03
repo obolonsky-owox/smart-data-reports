@@ -1,6 +1,6 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DM, VISITOR_SCHEMA, sampleRows } from '../../fixtures/smart-data';
+import { DM, VISITOR_GRAPH, VISITOR_SCHEMA, sampleRows } from '../../fixtures/smart-data';
 import { buildSchemaIndex } from '../../lib/schema-index';
 import { emptyDraft, type ReportDraft } from '../../lib/report-draft';
 import type { RunState } from '../editor/use-query-run';
@@ -19,7 +19,7 @@ function setup(run: RunState, d: ReportDraft = draft, linked = false) {
     onSort: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(), onEditFilter: vi.fn(),
     onRemoveFilter: vi.fn(), onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(),
   };
-  renderUi(<ResultTable index={index} draft={d} run={run} stale={false} linked={linked} {...handlers} />);
+  renderUi(<ResultTable index={index} graph={VISITOR_GRAPH} draft={d} run={run} stale={false} linked={linked} {...handlers} />);
   return handlers;
 }
 
@@ -117,4 +117,16 @@ it('formats the range with thousands separators', async () => {
   setup(success(sampleRows(['email'], 2500)));
   for (let i = 0; i < 10; i++) await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
   expect(screen.getByText('1,001–1,100 of 2,500')).toBeInTheDocument();
+});
+
+it('heads a column with the field, then its data mart, and previews a joined one\'s join path', async () => {
+  const joined: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }, { name: 'sessions__source', aliasPath: 'sessions' }] };
+  setup(success(sampleRows(['email', 'sessions__source'], 2), { appliedDraft: joined }), joined);
+  const [, source] = screen.getAllByRole('columnheader');
+  const field = within(source!).getByText('Source');
+  const mart = within(source!).getByText('Session');
+  expect(field.compareDocumentPosition(mart)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  await userEvent.hover(mart);
+  const path = await screen.findByRole('list', { name: 'Join path' }, { timeout: 2000 });
+  expect(within(path).getByText('client_id = client_id')).toBeInTheDocument();
 });

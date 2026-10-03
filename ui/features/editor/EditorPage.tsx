@@ -519,6 +519,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
               <TabsContent value='table'>
                 <ResultTable
                   index={index}
+                  graph={graph}
                   draft={draft}
                   run={query.state}
                   stale={stale}
