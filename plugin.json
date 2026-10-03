@@ -10,6 +10,14 @@
         "type": "data-mart",
         "actions": { "read": "USE", "create": "USE", "update": "USE", "delete": "USE" }
       }
+    },
+    {
+      "name": "snapshots",
+      "scope": "member",
+      "entityBinding": {
+        "type": "data-mart",
+        "actions": { "read": "USE", "create": "USE", "update": "USE", "delete": "USE" }
+      }
     }
   ]
 }

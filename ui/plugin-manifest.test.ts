@@ -8,12 +8,21 @@ describe('plugin.json', () => {
     });
   });
 
-  it('keeps the released collection declaration unchanged', () => {
-    // Released collections can never change name, scope or entityBinding.
+  it('keeps the released collection declarations unchanged', () => {
+    // Released collections can never change name, scope or entityBinding; new ones may only be added.
     expect(manifest.collections).toEqual([
       {
         name: 'reports',
         scope: 'project',
+        entityBinding: {
+          type: 'data-mart',
+          actions: { read: 'USE', create: 'USE', update: 'USE', delete: 'USE' },
+        },
+      },
+      {
+        // Results hold rows of joined data marts too, so each member keeps their own.
+        name: 'snapshots',
+        scope: 'member',
         entityBinding: {
           type: 'data-mart',
           actions: { read: 'USE', create: 'USE', update: 'USE', delete: 'USE' },

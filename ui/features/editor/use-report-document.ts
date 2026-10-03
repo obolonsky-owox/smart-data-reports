@@ -3,7 +3,7 @@ import { useServices } from '../../services';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import type { ReportRunStatus } from '../../lib/odm-types';
 import type { ReportDraft } from '../../lib/report-draft';
-import { configHash, stableHash, type LinkedReport, type SavedReport, type StoredReport } from '../../lib/report-store';
+import { stableHash, type LinkedReport, type SavedReport, type StoredReport } from '../../lib/report-store';
 import { createLinkedReport, updateLinkedReport, type SyncOutcome } from '../../lib/sheets-sync';
 
 export type SaveOutcome =
@@ -33,7 +33,8 @@ export interface ReportDocument {
   setDraft: Dispatch<SetStateAction<ReportDraft | null>>;
   dirty: boolean;
   isAuthor: boolean;
-  saveWithSync(options?: { asCopy?: boolean } & SyncOptions): Promise<SaveOutcome>;
+  /** Saves the document only; a linked Google Sheets report is updated with `updateSheetsReport`. */
+  saveDraft(options?: { asCopy?: boolean }): Promise<void>;
   createSheetsReport(input: { title: string; destinationId: string }): Promise<SyncOutcome>;
   updateSheetsReport(options?: SyncOptions): Promise<SaveOutcome>;
 }
@@ -137,14 +138,11 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
     [api, save, pollIntervalMs],
   );
 
-  const saveWithSync = useCallback(
-    async ({ asCopy = false, ...sync }: { asCopy?: boolean } & SyncOptions = {}): Promise<SaveOutcome> => {
-      const linked = asCopy ? undefined : savedRef.current.report?.linkedReport;
-      if (linked && draftRef.current && linked.syncedDraftHash !== configHash(draftRef.current)) return syncLinked(linked, sync);
+  const saveDraft = useCallback(
+    async ({ asCopy = false }: { asCopy?: boolean } = {}): Promise<void> => {
       await save(asCopy ? { asCopy, title: `${titleRef.current} (copy)`, linkedReport: null } : {});
-      return { kind: 'saved' };
     },
-    [save, syncLinked],
+    [save],
   );
 
   const updateSheetsReport = useCallback(
@@ -185,7 +183,7 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
     setDraft,
     dirty,
     isAuthor: !saved.report || saved.report.createdBy === userId,
-    saveWithSync,
+    saveDraft,
     createSheetsReport,
     updateSheetsReport,
   };

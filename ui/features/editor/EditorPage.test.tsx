@@ -1,9 +1,9 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { toast } from 'sonner';
 import { DM, sampleRows, STORAGE } from '../../fixtures/smart-data';
 import { emptyDraft, type ReportDraft } from '../../lib/report-draft';
 import { configHash, type StoredReport } from '../../lib/report-store';
+import { toSnapshot } from '../../lib/run-snapshot';
 import { __mock, __resetForTests } from '../../sdk-mock';
 import { mockServices, renderWithServices } from '../../test/render';
 import { EditorPage } from './EditorPage';
@@ -48,6 +48,47 @@ it('builds a report from scratch with a 30-day default period and shows rows', a
     column: ['email'],
     limit: 2501,
     filter: [{ column: 'creation_date', operator: 'relative_date', value: { kind: 'last_n_days', n: 29 } }],
+  });
+});
+
+describe('the last result', () => {
+  const queries = () => __mock.state.requests.filter((r) => r.path.startsWith('/api/external/http-data/')).length;
+
+  it('saves on Apply & Save, keeps the result for the member and shows it on the next opening without a query', async () => {
+    await startVisitorReport();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Apply & Save' }));
+    expect(await screen.findByText('1–100 of 120')).toBeInTheDocument();
+    const [saved] = [...__mock.state.collections.get('reports')!.values()];
+    await waitFor(() => expect(__mock.state.collections.get('snapshots')?.get(saved!.id)).toBeDefined());
+    expect(__mock.state.collections.get('snapshots')!.get(saved!.id)!.parentId).toBe(DM.visitor);
+    // Nothing changed since, so there is nothing to apply or save.
+    expect(screen.getByRole('button', { name: 'Apply & Save' })).toBeDisabled();
+
+    cleanup();
+    const before = queries();
+    renderWithServices(<EditorPage reportId={saved!.id} onBack={vi.fn()} />, await mockServices());
+    expect(await screen.findByText('1–100 of 120')).toBeInTheDocument();
+    expect(screen.getByText(/^Last updated /)).toBeInTheDocument();
+    expect(queries()).toBe(before);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(queries()).toBe(before + 1));
+  });
+
+  it('opens empty when the kept result is of another main data mart', async () => {
+    __mock.seedReport('r1', {
+      schemaVersion: 1, title: 'Visitors', createdBy: 'demo-user', updatedBy: 'demo-user',
+      draft: { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }] },
+    });
+    const services = await mockServices();
+    await services.snapshots.put('r1', toSnapshot({
+      ranAt: '2026-10-02T10:00:00.000Z', configHash: 'x', draft: { ...emptyDraft(DM.session), columns: [{ name: 'source', aliasPath: '' }] },
+      rows: [{ source: 'google' }], truncated: false, totals: null,
+    }));
+    renderWithServices(<EditorPage reportId='r1' onBack={vi.fn()} />, services);
+    expect(await screen.findByText('Pick columns and click Apply & Save')).toBeInTheDocument();
+    expect(screen.queryByText('google')).not.toBeInTheDocument();
   });
 });
 
@@ -130,7 +171,7 @@ it('cancels the running query and clears the result when the main data mart chan
   expect(await screen.findByText('Running query…')).toBeInTheDocument();
   await pickMart('Report on', 'Session');
   await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove and continue' }));
-  expect(await screen.findByText('Pick columns and click Apply')).toBeInTheDocument();
+  expect(await screen.findByText('Pick columns and click Apply & Save')).toBeInTheDocument();
   expect(screen.queryByText('Running query…')).not.toBeInTheDocument();
   expect(signal?.aborted).toBe(true);
 });
@@ -290,7 +331,7 @@ async function openTheirs() {
 
 it("saves someone else's report as a copy by default", async () => {
   await userEvent.click(await openTheirs());
-  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Apply & Save' }));
   await userEvent.click(await screen.findByRole('button', { name: 'Save as copy' }));
   await waitFor(() => expect(reports().size).toBe(2));
   expect(reports().get('theirs')!.document).toEqual(theirs);
@@ -301,7 +342,7 @@ it("saves someone else's report as a copy by default", async () => {
 it('never overwrites when the confirmation is dismissed with Enter', async () => {
   await openTheirs();
   await userEvent.type(screen.getByRole('textbox', { name: 'Report title' }), ' edited');
-  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Apply & Save' }));
   const confirm = await screen.findByRole('alertdialog');
   for (const name of ['Cancel', 'Overwrite', 'Save as copy']) expect(within(confirm).getByRole('button', { name })).toBeInTheDocument();
   await userEvent.keyboard('{Enter}');
@@ -432,7 +473,7 @@ describe('the column panel layout', () => {
     expect(screen.queryByTestId('columnPanel')).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Data table' })).toBeInTheDocument();
-    expect(screen.getByText('Pick columns and click Apply')).toBeInTheDocument();
+    expect(screen.getByText('Pick columns and click Apply & Save')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Show column panel' }));
     expect(screen.getByTestId('columnPanel')).toBeInTheDocument();
@@ -483,15 +524,30 @@ describe('saving a report linked to Google Sheets', () => {
   const savedDoc = () => [...reports().values()][0]!;
   const puts = () => __mock.state.requests.filter((r) => r.method === 'PUT');
 
+  const updateSheets = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Update Google Sheets' }));
+    const guard = screen.queryByRole('alertdialog');
+    if (guard) await userEvent.click(within(guard).getByRole('button', { name: 'Overwrite' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Update report' }));
+  };
+
+  it('saves on Apply & Save without updating Google Sheets', async () => {
+    const stored = await openLinked();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply & Save' }));
+    await waitFor(() => expect((savedDoc().document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id'));
+    expect(puts()).toEqual([]);
+    expect((savedDoc().document as StoredReport).linkedReport).toEqual(stored.linkedReport);
+    expect(screen.getByRole('button', { name: 'Update Google Sheets' })).toBeEnabled();
+  });
+
   it('keeps the edits when ODM rejects the update', async () => {
     const stored = await openLinked();
     __mock.fail('/api/reports/report-1', { code: 'HTTP_ERROR', status: 400, message: 'Bad Request', details: { message: 'Unknown column client_id.' } }, 'PUT');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and update Google Sheets' }));
-    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith("Saved. Google Sheets wasn't updated: Unknown column client_id."));
+    await updateSheets();
+    expect(await screen.findByText("Saved. Google Sheets wasn't updated: Unknown column client_id.")).toBeInTheDocument();
     const doc = savedDoc().document as StoredReport;
     expect(doc.draft.columns.map((c) => c.name)).toContain('client_id');
     expect(doc.linkedReport?.syncedDraftHash).toBe(stored.linkedReport!.syncedDraftHash);
-    expect(screen.queryByRole('status', { name: 'Unsaved changes' })).not.toBeInTheDocument();
   });
 
   it("keeps the edits and shows ODM's reason when overwriting another member's linked report is refused", async () => {
@@ -500,9 +556,8 @@ describe('saving a report linked to Google Sheets', () => {
       code: 'HTTP_ERROR', status: 403, message: 'Forbidden',
       details: { message: 'You are not an owner of this report.', error: 'Forbidden', statusCode: 403 },
     }, 'PUT');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and update Google Sheets' }));
-    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Overwrite' }));
-    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith("Saved. Google Sheets wasn't updated: You are not an owner of this report."));
+    await updateSheets();
+    expect(await screen.findByText("Saved. Google Sheets wasn't updated: You are not an owner of this report.")).toBeInTheDocument();
     expect((reports().get('mine')!.document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id');
   });
 
@@ -511,21 +566,13 @@ describe('saving a report linked to Google Sheets', () => {
     await pickMart('Report on', 'Session');
     const confirm = await screen.findByRole('alertdialog');
     await userEvent.click(within(confirm).getByRole('button', { name: 'Remove and continue' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Save and update Google Sheets' }));
-    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('create a new Google Sheets report for Session')));
+    await screen.findByText('1 row = 1 Session');
+    await updateSheets();
+    expect(await screen.findByText(/reads the previous data mart, so it's no longer linked/)).toBeInTheDocument();
     expect(puts()).toEqual([]);
     expect(reports().size).toBe(1);
     expect(savedDoc()).toMatchObject({ parentId: DM.session });
     expect((savedDoc().document as StoredReport).linkedReport).toBeUndefined();
-  });
-
-  it('saves without updating Google Sheets while the report has problems', async () => {
-    const broken: ReportDraft = { ...linkedDraft, columns: [...linkedDraft.columns, { name: 'gone_field', aliasPath: '' }] };
-    await openLinked({ draft: broken, linkedReport: link(broken, { dataMartId: DM.visitor }) });
-    await userEvent.click(screen.getByRole('button', { name: 'Save and update Google Sheets' }));
-    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/^Saved\. Google Sheets wasn't updated: /)));
-    expect(puts()).toEqual([]);
-    expect((savedDoc().document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id');
   });
 });
 

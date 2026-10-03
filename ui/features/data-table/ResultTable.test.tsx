@@ -11,21 +11,24 @@ const index = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, VISITOR_SCH
 const draft: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }, { name: 'visits', aliasPath: '' }] };
 
 function success(rows: Record<string, unknown>[], extra: Partial<Extract<RunState, { status: 'success' }>> = {}): RunState {
-  return { status: 'success', result: { rows, truncated: false, runId: 'r1' }, totals: null, appliedHash: 'h', appliedDraft: draft, ...extra };
+  return {
+    status: 'success', result: { rows, truncated: false, runId: 'r1' }, totals: null, appliedHash: 'h', appliedDraft: draft,
+    ranAt: '2026-10-02T10:49:55.000Z', settled: true, ...extra,
+  };
 }
 
-function setup(run: RunState, d: ReportDraft = draft, linked = false) {
+function setup(run: RunState, d: ReportDraft = draft, linked = false, stale = false) {
   const handlers = {
     onSort: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(), onEditFilter: vi.fn(),
-    onRemoveFilter: vi.fn(), onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(),
+    onRemoveFilter: vi.fn(), onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(), onRefresh: vi.fn(),
   };
-  renderUi(<ResultTable index={index} graph={VISITOR_GRAPH} draft={d} run={run} stale={false} linked={linked} {...handlers} />);
+  renderUi(<ResultTable index={index} graph={VISITOR_GRAPH} draft={d} run={run} stale={stale} linked={linked} {...handlers} />);
   return handlers;
 }
 
 it('prompts to apply before the first run', () => {
   setup({ status: 'idle' });
-  expect(screen.getByText('Pick columns and click Apply')).toBeInTheDocument();
+  expect(screen.getByText('Pick columns and click Apply & Save')).toBeInTheDocument();
 });
 
 it('shows 100 rows per page and pages without re-querying', async () => {
@@ -129,4 +132,22 @@ it('heads a column with the field, then its data mart, and previews a joined one
   await userEvent.hover(mart);
   const path = await screen.findByRole('list', { name: 'Join path' }, { timeout: 2000 });
   expect(within(path).getByText('client_id = client_id')).toBeInTheDocument();
+});
+
+it('says when the result was updated and refreshes it', async () => {
+  const h = setup(success(sampleRows(['email', 'visits'], 3)));
+  expect(screen.getByText(`Last updated ${new Date('2026-10-02T10:49:55.000Z').toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+  expect(h.onRefresh).toHaveBeenCalled();
+});
+
+it('offers no refresh of a result the report no longer matches', () => {
+  setup(success(sampleRows(['email', 'visits'], 3)), draft, false, true);
+  expect(screen.getByText('You changed the report. Click Apply & Save to update the result.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
+});
+
+it('says when a kept last result lost rows to the size limit', () => {
+  setup(success(sampleRows(['email', 'visits'], 3), { restored: true, rowCount: 2500 }));
+  expect(screen.getByText('Showing the first 3 of 2,500 rows kept from the last run. Refresh to see them all.')).toBeInTheDocument();
 });
