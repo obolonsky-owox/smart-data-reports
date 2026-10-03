@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DATA_MARTS, DM, VISITOR_SCHEMA } from '../../fixtures/smart-data';
+import { DATA_MARTS, DM, VISITOR_GRAPH, VISITOR_SCHEMA } from '../../fixtures/smart-data';
 import { buildSchemaIndex } from '../../lib/schema-index';
 import type { AggregateFunction, DateTruncUnit } from '../../lib/odm-types';
 import {
@@ -26,6 +26,7 @@ function Harness({ initial = emptyDraft(DM.visitor), spies = {} }: { initial?: R
     <>
       <AllFieldsTab
         index={index}
+        graph={VISITOR_GRAPH}
         draft={draft}
         marts={DATA_MARTS}
         onToggleField={(name, checked) => setDraft((d) => (checked ? addColumn(d, index, name).draft : removeColumn(d, name)))}
@@ -260,4 +261,73 @@ it('shows only selected fields when asked', async () => {
 
   await userEvent.click(screen.getByRole('switch', { name: 'Show selected only' }));
   expect(screen.getByRole('checkbox', { name: 'Client ID (Visitor)' })).toBeInTheDocument();
+});
+
+it('says so when nothing is selected and only selected fields are shown', async () => {
+  renderUi(<Harness />);
+  expect(screen.queryByText('No fields selected.')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('switch', { name: 'Show selected only' }));
+  expect(screen.getByText('No fields selected.')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('switch', { name: 'Show selected only' }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+  await userEvent.click(screen.getByRole('switch', { name: 'Show selected only' }));
+  expect(screen.queryByText('No fields selected.')).not.toBeInTheDocument();
+});
+
+it('collapses and expands a group that has selected fields', async () => {
+  const initial = { ...emptyDraft(DM.visitor), columns: [{ name: 'sessions__source', aliasPath: 'sessions' }] };
+  renderUi(<Harness initial={initial} />);
+  const session = screen.getByRole('button', { name: 'Session' });
+  expect(session).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('checkbox', { name: 'Source (Session)' })).toBeChecked();
+
+  await userEvent.click(session);
+  expect(session).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('checkbox', { name: 'Source (Session)' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'Duration (Session)' })).not.toBeInTheDocument();
+
+  await userEvent.click(session);
+  expect(screen.getByRole('checkbox', { name: 'Source (Session)' })).toBeChecked();
+});
+
+it('opens the main data mart and the groups with selected fields at first', () => {
+  const initial = { ...emptyDraft(DM.visitor), columns: [{ name: 'contact__name', aliasPath: 'contact' }] };
+  renderUi(<Harness initial={initial} />);
+  expect(screen.getByRole('button', { name: 'Visitor' })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: 'Contact' })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: 'Session' })).toHaveAttribute('aria-expanded', 'false');
+});
+
+it('counts the selected fields of each data mart', async () => {
+  renderUi(<Harness />);
+  const session = screen.getByRole('button', { name: 'Session' });
+  expect(session).not.toHaveAccessibleDescription();
+  expect(within(session).queryByText(/\d/)).not.toBeInTheDocument();
+
+  await userEvent.click(session);
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Duration (Session)' }));
+  expect(session).toHaveAccessibleDescription('2 selected');
+  expect(within(session).getByText('2')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Visitor' })).not.toHaveAccessibleDescription();
+
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Source (Session)' }));
+  expect(session).toHaveAccessibleDescription('1 selected');
+});
+
+it('previews the join path when hovering the path chip', async () => {
+  const initial = { ...emptyDraft(DM.visitor), columns: [{ name: 'sessions_pageviews_page__title', aliasPath: 'sessions.pageviews.page' }] };
+  renderUi(<Harness initial={initial} />);
+  await userEvent.hover(screen.getByRole('button', { name: 'via Session › Pageview › Page' }));
+  const tooltip = await screen.findByRole('tooltip', {}, { timeout: 2000 });
+
+  expect([...tooltip.querySelectorAll('[data-slot="join-path-node"]')].map((n) => n.textContent)).toEqual(['Visitor', 'Session', 'Pageview', 'Page']);
+  expect(within(tooltip).getByText('session_id = session_id')).toBeInTheDocument();
+  expect(within(tooltip).getByText('page_id = id')).toBeInTheDocument();
+  // Rows multiply where sessions join in; the hops after it inherit that grain.
+  expect(within(tooltip).getAllByText('×N')).toHaveLength(1);
+  expect(within(tooltip).getByText('Session: Sessions of the visitor.')).toBeInTheDocument();
+  expect(within(tooltip).getByText('Pageview: Pages viewed in the session.')).toBeInTheDocument();
+  expect(within(tooltip).getByText('Page: The page that was viewed.')).toBeInTheDocument();
 });

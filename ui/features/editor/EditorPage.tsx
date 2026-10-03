@@ -400,6 +400,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const panel = (
     <ColumnPanel
       index={index}
+      graph={graph}
       draft={draft}
       marts={marts!}
       filterRequest={filterRequest}
