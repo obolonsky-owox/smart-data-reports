@@ -103,6 +103,8 @@ export function createSnapshotStore(collection: CollectionLike<RunSnapshot>) {
     async put(reportId: string, snapshot: RunSnapshot): Promise<void> {
       await collection.put(reportId, snapshot, { parentId: snapshot.draft.mainDataMartId });
     },
+
+    remove: (reportId: string) => collection.delete(reportId),
   };
 }
 
