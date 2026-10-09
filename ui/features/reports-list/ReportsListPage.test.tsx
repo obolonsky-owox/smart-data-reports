@@ -62,7 +62,7 @@ describe('deleting a report', () => {
     __mock.seedReport('r1', report());
     __mock.seedReport('r2', report({ title: 'Sessions', draft: emptyDraft(DM.session) }));
     const services = await mockServices();
-    await services.snapshots.put('r1', toSnapshot({ ranAt: '2026-10-05T10:00:00Z', configHash: 'h', draft: emptyDraft(DM.visitor), rows: [], truncated: false, totals: null }));
+    await services.snapshots.put('r1', toSnapshot({ ranAt: '2026-10-05T10:00:00Z', configHash: 'h', draft: emptyDraft(DM.visitor), rows: [], truncated: false, totals: null, executedSql: null }));
     const onOpen = vi.fn();
     renderWithServices(<ReportsListPage onOpen={onOpen} onCreate={vi.fn()} />, services);
     const dialog = await openMenu('Visitors by source');

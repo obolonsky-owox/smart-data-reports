@@ -23,6 +23,8 @@ export interface OwoxClient {
 
 export interface QueryResult { rows: Row[]; truncated: boolean; runId?: string }
 
+export interface RunDetails { totals: Totals | null; executedSql: string | null }
+
 export interface ReportTarget {
   title: string;
   destinationId: string;
@@ -160,9 +162,15 @@ export function createOdmApi(owox: OwoxClient) {
       return { rows: rows.slice(0, ROW_CAP), truncated, runId: traversal.runId };
     },
 
-    async getRunTotals(dataMartId: string, runId: string): Promise<Totals | null> {
-      const run = await owox.getJson<{ totals?: Totals | null }>(`/api/data-marts/${enc(dataMartId)}/runs/${enc(runId)}`);
-      return run.totals ?? null;
+    /** ODM saves the executed SQL with parameter values inlined; older hosts don't. */
+    async getRunDetails(dataMartId: string, runId: string): Promise<RunDetails> {
+      const run = await owox.getJson<{ totals?: Totals | null; additionalParams?: unknown }>(
+        `/api/data-marts/${enc(dataMartId)}/runs/${enc(runId)}`,
+      );
+      const params = isRecord(run.additionalParams) ? run.additionalParams : {};
+      const httpData = isRecord(params.httpData) ? params.httpData : {};
+      const sql = httpData.executionSqlQuery;
+      return { totals: run.totals ?? null, executedSql: typeof sql === 'string' && sql.trim() ? sql : null };
     },
 
     async listSheetsDestinations(): Promise<SheetsDestination[]> {

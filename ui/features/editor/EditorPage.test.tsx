@@ -84,7 +84,7 @@ describe('the last result', () => {
     const services = await mockServices();
     await services.snapshots.put('r1', toSnapshot({
       ranAt: '2026-10-02T10:00:00.000Z', configHash: 'x', draft: { ...emptyDraft(DM.session), columns: [{ name: 'source', aliasPath: '' }] },
-      rows: [{ source: 'google' }], truncated: false, totals: null,
+      rows: [{ source: 'google' }], truncated: false, totals: null, executedSql: null,
     }));
     renderWithServices(<EditorPage reportId='r1' onBack={vi.fn()} />, services);
     expect(await screen.findByText('Pick columns and click Apply & Save')).toBeInTheDocument();
@@ -128,7 +128,21 @@ it('confirms a join path change that drops selections, and keeps the path on can
   expect(screen.getByRole('tab', { name: 'Selected (1)' })).toBeInTheDocument();
 });
 
-it('routes a capped result to a Google Sheets report and then shows its SQL', async () => {
+it('shows the SQL of the last run and says when the report has changed since', async () => {
+  await startVisitorReport();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+  await userEvent.click(screen.getByTestId('apply'));
+  await userEvent.click(screen.getByRole('tab', { name: 'SQL' }));
+  expect(await screen.findByTestId('sqlCode')).toHaveTextContent('SELECT email FROM `demo.data_mart` WHERE TRUE LIMIT 2501');
+  expect(screen.getByText(/^SQL from the last run, .+\.$/)).toBeInTheDocument();
+  expect(__mock.state.requests.some((r) => r.path.endsWith('/generated-sql'))).toBe(false);
+
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Client ID (Visitor)' }));
+  expect(screen.getByText(/Run the report again to see the SQL for your changes\.$/)).toBeInTheDocument();
+});
+
+it('routes a capped result to a Google Sheets report and then shows its SQL when the run has none', async () => {
+  __mock.dropRunSql();
   __mock.setRows((columns) => sampleRows(columns, 2600));
   await startVisitorReport();
   await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));

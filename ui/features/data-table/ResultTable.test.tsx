@@ -12,7 +12,7 @@ const draft: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email
 
 function success(rows: Record<string, unknown>[], extra: Partial<Extract<RunState, { status: 'success' }>> = {}): RunState {
   return {
-    status: 'success', result: { rows, truncated: false, runId: 'r1' }, totals: null, appliedHash: 'h', appliedDraft: draft,
+    status: 'success', result: { rows, truncated: false, runId: 'r1' }, totals: null, executedSql: null, appliedHash: 'h', appliedDraft: draft,
     ranAt: '2026-10-02T10:49:55.000Z', settled: true, ...extra,
   };
 }

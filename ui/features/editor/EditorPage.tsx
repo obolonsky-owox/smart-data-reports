@@ -31,7 +31,7 @@ import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
 import { ResultTable } from '../data-table/ResultTable';
 import { RelationshipCanvas } from '../canvas/RelationshipCanvas';
 import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
-import { SqlTab } from '../sql/SqlTab';
+import { SqlTab, type LastRunSql } from '../sql/SqlTab';
 import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
 import { useQueryRun } from './use-query-run';
 import { useReportDocument } from './use-report-document';
@@ -179,7 +179,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     if (written.current === key) return;
     written.current = key;
     const snapshot = toSnapshot({
-      ranAt: s.ranAt, configHash: s.appliedHash, draft: s.appliedDraft, rows: s.result.rows, truncated: s.result.truncated, totals: s.totals,
+      ranAt: s.ranAt, configHash: s.appliedHash, draft: s.appliedDraft, rows: s.result.rows, truncated: s.result.truncated, totals: s.totals, executedSql: s.executedSql,
     });
     // A result that can't be kept only means the next opening starts empty.
     snapshots.put(savedId, snapshot).catch(() => undefined);
@@ -229,6 +229,13 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   }
 
   const shownCurrent = query.state.status === 'success' && !stale;
+  const run = query.state;
+  const lastRunSql: LastRunSql =
+    run.status === 'running' || (run.status === 'success' && !run.settled)
+      ? 'pending'
+      : run.status === 'success'
+        ? { sql: run.executedSql, ranAt: run.ranAt, changedSince: stale }
+        : null;
 
   async function save(asCopy = false): Promise<boolean> {
     setSaving(true);
@@ -572,6 +579,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
               </TabsContent>
               <TabsContent value='sql'>
                 <SqlTab
+                  lastRun={lastRunSql}
                   linked={linked}
                   draftChanged={!!linked && linked.syncedDraftHash !== hash}
                   reportTitle={doc.title}

@@ -6,6 +6,7 @@ import { Skeleton } from '@owox/ui/components/skeleton';
 import { cn } from '@owox/ui/lib/utils';
 import { useServices } from '../../services';
 import { describeError, type UserFacingError } from '../../lib/errors';
+import { formatDateTime } from '../../lib/format';
 import type { LinkedReport } from '../../lib/report-store';
 import { tokenizeSql, type SqlToken } from '../../lib/sql-highlight';
 
@@ -17,7 +18,11 @@ const TOKEN_CLASS: Record<SqlToken['kind'], string> = {
   plain: '',
 };
 
+/** The last run's SQL, `pending` while the run or its details are still being read. */
+export type LastRunSql = 'pending' | { sql: string | null; ranAt: string; changedSince: boolean } | null;
+
 interface SqlTabProps {
+  lastRun: LastRunSql;
   linked?: LinkedReport;
   draftChanged: boolean;
   reportTitle: string;
@@ -37,12 +42,36 @@ function download(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
-export function SqlTab({ linked, draftChanged, reportTitle, onCreateSheets, onUpdateSheets }: SqlTabProps) {
+function SqlCode({ sql, filename, note }: { sql: string; filename: string; note?: string }) {
+  return (
+    <>
+      <div className='flex items-center justify-end gap-2'>
+        {note && <p className='mr-auto text-xs text-muted-foreground'>{note}</p>}
+        <Button variant='outline' size='sm' onClick={() => download(filename, sql)}>
+          <Download className='h-4 w-4' />
+          Download .sql
+        </Button>
+      </div>
+      <pre className='dm-card overflow-auto font-mono text-xs leading-relaxed whitespace-pre' data-testid='sqlCode'>
+        {tokenizeSql(sql).map((token, i) => (
+          <span key={i} className={cn(TOKEN_CLASS[token.kind])}>
+            {token.text}
+          </span>
+        ))}
+      </pre>
+    </>
+  );
+}
+
+export function SqlTab({ lastRun, linked, draftChanged, reportTitle, onCreateSheets, onUpdateSheets }: SqlTabProps) {
   const { api } = useServices();
   const [state, setState] = useState<SqlState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const reportId = linked?.reportId;
+  const runSql = lastRun !== 'pending' ? lastRun?.sql : null;
+  // The Google Sheets report's SQL is the fallback for runs without SQL, e.g. on an older host.
+  const reportId = lastRun === 'pending' || runSql ? undefined : linked?.reportId;
   const version = linked?.syncedDraftHash;
+  const filename = `${reportTitle.replace(/[^\w-]+/g, '_') || 'report'}.sql`;
 
   useEffect(() => {
     if (!reportId) return;
@@ -57,12 +86,27 @@ export function SqlTab({ linked, draftChanged, reportTitle, onCreateSheets, onUp
     };
   }, [api, reportId, version, attempt]);
 
+  if (lastRun === 'pending') return <Skeleton className='my-2 h-64 w-full' />;
+
+  if (lastRun && runSql) {
+    const note = lastRun.changedSince
+      ? `SQL from the last run, ${formatDateTime(lastRun.ranAt)}. Run the report again to see the SQL for your changes.`
+      : `SQL from the last run, ${formatDateTime(lastRun.ranAt)}.`;
+    return (
+      <div className='flex flex-col gap-2 py-2'>
+        <SqlCode sql={runSql} filename={filename} note={note} />
+      </div>
+    );
+  }
+
   if (!linked) {
     return (
       <div className='dm-empty-state'>
         <FileCode2 className='dm-empty-state-ico' />
-        <h2 className='dm-empty-state-title'>ODM doesn't return SQL for ad-hoc queries yet.</h2>
-        <p className='dm-empty-state-subtitle'>Create a Google Sheets report with this configuration to get both the SQL and the report.</p>
+        <h2 className='dm-empty-state-title'>{lastRun ? "ODM didn't return SQL for the last run." : 'Run the report to see its SQL.'}</h2>
+        <p className='dm-empty-state-subtitle'>
+          {lastRun ? 'Create' : 'Or create'} a Google Sheets report with this configuration to get both the SQL and the report.
+        </p>
         <Button onClick={onCreateSheets}>
           <Sheet className='h-4 w-4' />
           Create Google Sheets report
@@ -96,23 +140,7 @@ export function SqlTab({ linked, draftChanged, reportTitle, onCreateSheets, onUp
           </AlertDescription>
         </Alert>
       )}
-      {state.status === 'ready' && (
-        <>
-          <div className='flex justify-end'>
-            <Button variant='outline' size='sm' onClick={() => download(`${reportTitle.replace(/[^\w-]+/g, '_') || 'report'}.sql`, state.sql)}>
-              <Download className='h-4 w-4' />
-              Download .sql
-            </Button>
-          </div>
-          <pre className='dm-card overflow-auto font-mono text-xs leading-relaxed whitespace-pre' data-testid='sqlCode'>
-            {tokenizeSql(state.sql).map((token, i) => (
-              <span key={i} className={cn(TOKEN_CLASS[token.kind])}>
-                {token.text}
-              </span>
-            ))}
-          </pre>
-        </>
-      )}
+      {state.status === 'ready' && <SqlCode sql={state.sql} filename={filename} />}
     </div>
   );
 }
