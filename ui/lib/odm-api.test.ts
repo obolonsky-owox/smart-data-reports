@@ -178,3 +178,18 @@ it('waits for a new finished run of a report', async () => {
   expect(calls).toContainEqual({ method: 'POST', path: '/api/reports/r/run', body: {} });
   expect(sleeps).toEqual([2000, 2000, 2000]);
 });
+
+describe('getRunDetails', () => {
+  it('reads the totals and the executed SQL of an HTTP Data run', async () => {
+    const run = { totals: { 'visits | SUM': 3 }, additionalParams: { httpData: { executionSqlQuery: 'SELECT 1' } } };
+    const getJson = vi.fn(async () => run);
+    const { owox } = fakeOwox({ getJson: getJson as OwoxClient['getJson'] });
+    expect(await createOdmApi(owox).getRunDetails(DM.visitor, 'run-1')).toEqual({ totals: { 'visits | SUM': 3 }, executedSql: 'SELECT 1' });
+    expect(getJson).toHaveBeenCalledWith(`/api/data-marts/${DM.visitor}/runs/run-1`);
+  });
+
+  it('has no SQL when the host did not save it', async () => {
+    const { owox } = fakeOwox({ getJson: async <T,>() => ({ totals: null, additionalParams: { httpData: { rowCount: 1 } } }) as T });
+    expect(await createOdmApi(owox).getRunDetails(DM.visitor, 'run-1')).toEqual({ totals: null, executedSql: null });
+  });
+});

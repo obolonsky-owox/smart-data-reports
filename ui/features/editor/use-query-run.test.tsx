@@ -18,7 +18,7 @@ it('never lets an older run overwrite a newer one', async () => {
   const queue = [first, second];
   const api = {
     runQuery: vi.fn(() => queue.shift()!.promise),
-    getRunTotals: vi.fn(async () => ({ 'visits | SUM': 1 })),
+    getRunDetails: vi.fn(async () => ({ totals: { 'visits | SUM': 1 }, executedSql: 'SELECT 2' })),
   } as unknown as OdmApi;
   const { result } = renderHook(() => useQueryRun(api, { totalsRetryMs: 0 }));
 
@@ -31,23 +31,23 @@ it('never lets an older run overwrite a newer one', async () => {
   const state = result.current.state;
   if (state.status !== 'success') throw new Error('not success');
   expect(state.result.rows).toEqual([{ client_id: 'b' }]);
-  await waitFor(() => expect(result.current.state).toMatchObject({ totals: { 'visits | SUM': 1 } }));
-  expect(api.getRunTotals).toHaveBeenCalledWith(DM.visitor, 'r2');
+  await waitFor(() => expect(result.current.state).toMatchObject({ totals: { 'visits | SUM': 1 }, executedSql: 'SELECT 2' }));
+  expect(api.getRunDetails).toHaveBeenCalledWith(DM.visitor, 'r2');
 });
 
-it('retries totals once when the first read is empty', async () => {
-  const totals = [null, { 'visits | SUM': 5 }];
+it('retries totals once when the first read is empty and keeps the SQL it already read', async () => {
+  const reads = [{ totals: null, executedSql: 'SELECT 1' }, { totals: { 'visits | SUM': 5 }, executedSql: null }];
   const api = {
     runQuery: vi.fn(async () => ({ rows: [], truncated: false, runId: 'r1' })),
-    getRunTotals: vi.fn(async () => totals.shift() ?? null),
+    getRunDetails: vi.fn(async () => reads.shift()),
   } as unknown as OdmApi;
   const { result } = renderHook(() => useQueryRun(api, { totalsRetryMs: 0 }));
   await act(async () => result.current.run(DM.visitor, draft('email')));
-  await waitFor(() => expect(result.current.state).toMatchObject({ totals: { 'visits | SUM': 5 } }));
+  await waitFor(() => expect(result.current.state).toMatchObject({ settled: true, totals: { 'visits | SUM': 5 }, executedSql: 'SELECT 1' }));
 });
 
 it('cancels a running query', async () => {
-  const api = { runQuery: vi.fn(() => new Promise(() => {})), getRunTotals: vi.fn() } as unknown as OdmApi;
+  const api = { runQuery: vi.fn(() => new Promise(() => {})), getRunDetails: vi.fn() } as unknown as OdmApi;
   const { result } = renderHook(() => useQueryRun(api));
   act(() => void result.current.run(DM.visitor, draft('email')));
   expect(result.current.state.status).toBe('running');
@@ -59,7 +59,7 @@ it('resets to idle and aborts the running query', async () => {
   let signal: AbortSignal | undefined;
   const api = {
     runQuery: vi.fn((_id: string, _options: unknown, s: AbortSignal) => ((signal = s), new Promise(() => {}))),
-    getRunTotals: vi.fn(),
+    getRunDetails: vi.fn(),
   } as unknown as OdmApi;
   const { result } = renderHook(() => useQueryRun(api));
   act(() => void result.current.run(DM.visitor, draft('email')));
@@ -70,7 +70,7 @@ it('resets to idle and aborts the running query', async () => {
 
 it("names the data mart when the query isn't allowed", async () => {
   const forbidden = Object.assign(new Error('Forbidden'), { name: 'PluginTransportError', payload: { code: 'HTTP_ERROR', status: 403, message: 'Forbidden' } });
-  const api = { runQuery: vi.fn(async () => { throw forbidden; }), getRunTotals: vi.fn() } as unknown as OdmApi;
+  const api = { runQuery: vi.fn(async () => { throw forbidden; }), getRunDetails: vi.fn() } as unknown as OdmApi;
   const { result } = renderHook(() => useQueryRun(api));
   await act(async () => result.current.run(DM.visitor, draft('email'), 'Visitor'));
   expect(result.current.state).toMatchObject({ status: 'error', error: { message: "You don't have access to Visitor." } });

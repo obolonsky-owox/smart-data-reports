@@ -25,6 +25,9 @@ function freshState() {
     opened: [] as string[],
     rows: (columns: string[]): Row[] => sampleRows(columns, 120),
     lastRows: [] as Row[],
+    /** The executed SQL the last run saved; null on a host that doesn't save it. */
+    lastSql: null as string | null,
+    savesRunSql: true,
     /** Keyed by path prefix; `method` limits a failure to one HTTP method. */
     failures: new Map<string, { payload: Payload; method?: string }>(),
     collections: new Map<string, Map<string, CollectionDoc<unknown>>>(),
@@ -103,6 +106,10 @@ const owox = {
       }
       rows = rows.slice(0, options.limit ?? rows.length);
       state.lastRows = rows;
+      const columns = (options.column ?? []).join(',\n  ');
+      state.lastSql = state.savesRunSql
+        ? `SELECT\n  ${columns}\nFROM \`demo.data_mart\`\nWHERE TRUE${options.limit ? `\nLIMIT ${options.limit}` : ''}`
+        : null;
       return traversal(rows, `run-${state.clock}`);
     },
   },
@@ -121,7 +128,10 @@ const owox = {
       if (!graph) throw notFound();
       return graph as T;
     }
-    if (/^\/api\/data-marts\/[^/]+\/runs\/[^/]+$/.test(path)) return { totals: totalsOf(state.lastRows) } as T;
+    if (/^\/api\/data-marts\/[^/]+\/runs\/[^/]+$/.test(path)) {
+      const httpData = state.lastSql ? { executionSqlQuery: state.lastSql } : {};
+      return { totals: totalsOf(state.lastRows), additionalParams: { httpData } } as T;
+    }
     if (path === '/api/data-destinations/by-type/GOOGLE_SHEETS') return state.destinations as T;
     if (/\/generated-sql$/.test(path)) {
       const report = state.reports.get(id(/^\/api\/reports\/([^/]+)\//));
@@ -248,6 +258,10 @@ export const __mock = {
   },
   setRows(fn: (columns: string[]) => Row[]) {
     state.rows = fn;
+  },
+  /** Simulates a host that doesn't save the executed SQL of HTTP Data runs. */
+  dropRunSql() {
+    state.savesRunSql = false;
   },
   seedReport(id: string, report: StoredReport) {
     const docs = state.collections.get('reports') ?? new Map<string, CollectionDoc<unknown>>();

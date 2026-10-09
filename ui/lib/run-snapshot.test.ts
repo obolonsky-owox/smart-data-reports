@@ -5,7 +5,7 @@ import type { CollectionDoc, CollectionLike } from './report-store';
 
 const draft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }, { name: 'visits', aliasPath: '', aggregations: ['SUM' as const] }] };
 const rows = Array.from({ length: 50 }, (_, i) => ({ email: `user-${i}@example.com`, 'visits | SUM': i }));
-const input = { ranAt: '2026-10-03T12:00:00.000Z', configHash: 'h1', draft, rows, truncated: false, totals: { 'visits | SUM': 1225 } };
+const input = { ranAt: '2026-10-03T12:00:00.000Z', configHash: 'h1', draft, rows, truncated: false, totals: { 'visits | SUM': 1225 }, executedSql: 'SELECT email FROM t' };
 
 it('packs rows as values in key order and reads them back', () => {
   const snapshot = toSnapshot(input);
@@ -37,6 +37,11 @@ it('rejects documents that are not snapshots', () => {
   expect(parseSnapshot({ ...toSnapshot(input), schemaVersion: 2 })).toBeNull();
   expect(parseSnapshot({ ...toSnapshot(input), draft: {} })).toBeNull();
   expect(parseSnapshot({ ...toSnapshot(input), rows: [1] })).toBeNull();
+});
+
+it('reads a snapshot saved before it kept the executed SQL', () => {
+  const { executedSql: _sql, ...older } = toSnapshot(input);
+  expect(parseSnapshot(older)?.executedSql).toBeNull();
 });
 
 it('stores a snapshot under the report id and its main data mart', async () => {

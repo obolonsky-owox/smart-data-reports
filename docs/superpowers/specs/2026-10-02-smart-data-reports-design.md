@@ -33,7 +33,7 @@ Verified against `OWOX/owox-data-marts` `origin/main` on 2026-10-02 (plugin SDK 
 | Rows for a data mart are readable by a plugin only through `GET /api/external/http-data/data-marts/:id.ndjson` (`ctx.owox.dataMarts.traverseData`). `POST /api/data-marts/:id/preview` is `@RejectPluginAuth`. | `apps/backend/src/data-marts/controllers/external/http-data.controller.ts`, `data-mart-preview.controller.ts` |
 | HTTP Data accepts `column`, `filter`, `sort`, `aggregation`, `dateTrunc` (base64url JSON, ≤ 8,192 chars each) and `limit`. There is no offset. | `apps/backend/src/data-marts/dto/schemas/http-data-query.schema.ts` |
 | Every HTTP Data call creates an `HTTP_DATA` run and consumes credits. The run id comes back in `x-owox-run-id`; totals are on `GET /api/data-marts/:id/runs/:runId`. | `use-cases/stream-http-data.service.ts`, `mappers/data-mart.mapper.ts` |
-| Ad-hoc runs do not capture SQL (`captureExecutionSql: false`). Only saved reports expose SQL via `GET /api/reports/:id/generated-sql`. | `use-cases/stream-http-data.service.ts:181`, `controllers/report.controller.ts:166` |
+| HTTP Data runs with output controls or joined fields save the executed SQL, parameter values inlined, in `additionalParams.httpData.executionSqlQuery` of the run (since OWOX/owox-data-marts#1725, 2026-10-07; older hosts don't). Saved reports also expose SQL via `GET /api/reports/:id/generated-sql`. | `use-cases/stream-http-data.service.ts` `tryInlineExecutedSql`, `controllers/report.controller.ts:166` |
 | Fields reachable through joins come from `GET /api/data-marts/:id/blendable-schema`; each joined path is identified by `aliasPath`, each joined field by a unified SQL-safe name. One data mart can be reached through several paths at once. | `dto/domain/blendable-schema.dto.ts`, `services/blended-field-name.ts` |
 | Relationships are directional (source → target), equality joins only, always `LEFT JOIN`, no cardinality field. Grain impact is exposed per path as `mainGrainMultiplication` / `mainGrainCollapse`. | `entities/data-mart-relationship.entity.ts`, `blending/blended-sql-dialect.ts` |
 | Join keys per edge come from `GET /api/data-marts/:id/relationships/graph` (`relationship.joinConditions`). | `dto/presentation/relationship-graph-response-api.dto.ts` |
@@ -79,7 +79,7 @@ ui/
 | `getBlendableSchema(id)` | `GET /api/data-marts/:id/blendable-schema` |
 | `getRelationshipGraph(id)` | `GET /api/data-marts/:id/relationships/graph` |
 | `runQuery(id, params, signal)` | `traverseData` → `{ rows, runId, truncated }` |
-| `getRunTotals(id, runId)` | `GET /api/data-marts/:id/runs/:runId` → `totals` |
+| `getRunDetails(id, runId)` | `GET /api/data-marts/:id/runs/:runId` → `totals`, `additionalParams.httpData.executionSqlQuery` |
 | `listSheetsDestinations()` | `GET /api/data-destinations/by-type/GOOGLE_SHEETS` |
 | `createSpreadsheet(destId, title)` | `POST /api/data-destinations/:id/google-sheets/documents` |
 | `createReport(payload)` / `updateReport(id, payload)` | `POST /api/reports` / update endpoint (exact verb verified in §10) |
@@ -268,10 +268,13 @@ This / Last quarter, This / Last year, Custom, All time.
 
 ### 6.6 SQL tab
 
-- Draft not linked to a Google Sheets report: "ODM doesn't return SQL for ad-hoc queries yet.
-  Create a Google Sheets report with this configuration to get both the SQL and the report." +
-  button.
-- Linked: read-only SQL from `GET /api/reports/:id/generated-sql` with syntax highlighting and
+- After a run that saved its SQL: that SQL with syntax highlighting and *Download .sql*, and a
+  muted note "SQL from the last run, <time>." If the draft changed since the run, the note adds
+  "Run the report again to see the SQL for your changes." The member's snapshot keeps the SQL, so
+  a reopened report shows it too.
+- Otherwise, not linked to a Google Sheets report: "Run the report to see its SQL." (or "ODM
+  didn't return SQL for the last run." on an older host) and "Create Google Sheets report".
+- Otherwise, linked: read-only SQL from `GET /api/reports/:id/generated-sql` with syntax highlighting and
   *Download .sql*. If the draft changed since the report was last updated: warning "This SQL
   belongs to the Google Sheets report, not to your current changes." + *Update report*.
 - Clipboard API is blocked in the iframe; a `document.execCommand('copy')` fallback is added only
@@ -433,7 +436,6 @@ Any "no" changes the matching section of this spec before implementation continu
 ## 13. Out of scope for v1
 
 - Pre-run cost estimate (needs raw SQL and EDIT rights; bytes only on BigQuery and Snowflake).
-- SQL for ad-hoc queries (needs an ODM change; the SQL tab routes to a Google Sheets report).
 - Column rename.
 - Writing into an existing spreadsheet chosen by URL.
 - Creating a Google Sheets destination from the plugin.

@@ -14,6 +14,8 @@ export type RunState =
       status: 'success';
       result: QueryResult;
       totals: Totals | null;
+      /** The SQL ODM ran, with parameter values inlined; null until read, or when the host didn't save it. */
+      executedSql: string | null;
       appliedHash: string;
       appliedDraft: ReportDraft;
       ranAt: string;
@@ -49,16 +51,24 @@ export function useQueryRun(
         const result = await api.runQuery(dataMartId, toTraverseOptions(toReadPlan(draft)), controller.signal);
         if (!isCurrent()) return;
         const ranAt = now().toISOString();
-        setState({ status: 'success', result, totals: null, appliedHash, appliedDraft: draft, ranAt, settled: !result.runId });
-        if (!result.runId) return;
+        setState({
+          status: 'success', result, totals: null, executedSql: null, appliedHash, appliedDraft: draft, ranAt, settled: !result.runId,
+        });
+        const { runId } = result;
+        if (!runId) return;
+        const read = () => api.getRunDetails(dataMartId, runId).catch(() => null);
         // ODM writes totals into the run from a separate query, so the first read can be empty.
-        let totals = await api.getRunTotals(dataMartId, result.runId).catch(() => null);
-        if (totals === null && isCurrent()) {
+        let details = await read();
+        if (!details?.totals && isCurrent()) {
           await wait(totalsRetryMs);
-          totals = await api.getRunTotals(dataMartId, result.runId).catch(() => null);
+          const retry = await read();
+          details = { totals: retry?.totals ?? null, executedSql: retry?.executedSql ?? details?.executedSql ?? null };
         }
+        const { totals, executedSql } = details ?? { totals: null, executedSql: null };
         if (isCurrent()) {
-          setState((s) => (s.status === 'success' && s.ranAt === ranAt ? { ...s, totals: totals ?? s.totals, settled: true } : s));
+          setState((s) =>
+            s.status === 'success' && s.ranAt === ranAt ? { ...s, totals: totals ?? s.totals, executedSql, settled: true } : s,
+          );
         }
       } catch (error) {
         if (!isCurrent()) return;
@@ -78,6 +88,7 @@ export function useQueryRun(
             status: 'success',
             result: { rows: snapshotRows(snapshot), truncated: snapshot.truncated },
             totals: snapshot.totals,
+            executedSql: snapshot.executedSql,
             appliedHash: snapshot.configHash,
             appliedDraft: snapshot.draft,
             ranAt: snapshot.ranAt,

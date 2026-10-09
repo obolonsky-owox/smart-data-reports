@@ -23,6 +23,8 @@ export interface RunSnapshot {
   /** The run itself stopped at the row cap. */
   truncated: boolean;
   totals: Totals | null;
+  /** The SQL ODM ran; null in snapshots written before the plugin kept it, or when the host didn't save it. */
+  executedSql: string | null;
 }
 
 export interface SnapshotInput {
@@ -32,6 +34,7 @@ export interface SnapshotInput {
   rows: Row[];
   truncated: boolean;
   totals: Totals | null;
+  executedSql: string | null;
 }
 
 const byteLength = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -50,6 +53,7 @@ export function toSnapshot(input: SnapshotInput, maxBytes = MAX_SNAPSHOT_BYTES):
     rowCount: all.length,
     truncated: input.truncated,
     totals: input.totals,
+    executedSql: input.executedSql,
   });
   if (byteLength(make(all.length)) <= maxBytes) return make(all.length);
   // The largest row count that still fits; the empty snapshot always does.
@@ -88,6 +92,7 @@ export function parseSnapshot(value: unknown): RunSnapshot | null {
     rowCount: typeof value.rowCount === 'number' ? value.rowCount : value.rows.length,
     truncated: value.truncated === true,
     totals: isRecord(value.totals) ? (value.totals as Totals) : null,
+    executedSql: typeof value.executedSql === 'string' ? value.executedSql : null,
   };
 }
 
