@@ -31,6 +31,20 @@ it('lists saved reports with their data mart and author', async () => {
   expect(onOpen).toHaveBeenCalledWith('r2');
 });
 
+it("names other members' reports by the stored name, else by the data mart list", async () => {
+  const seed = (id: string, createdBy: string, extra: Partial<StoredReport> = {}) =>
+    __mock.seedReport(id, { schemaVersion: 1, title: id, draft: emptyDraft(DM.visitor), createdBy, updatedBy: createdBy, ...extra });
+  seed('stored', 'u1', { createdByName: 'Olena Koval' });
+  seed('owner', 'u2');
+  seed('unknown', 'u3');
+  __mock.state.martOwners = [{ userId: 'u2', fullName: null, email: 'taras@example.com' }];
+  renderWithServices(<ReportsListPage onOpen={vi.fn()} onCreate={vi.fn()} />, await mockServices());
+  const author = async (title: string) => within((await screen.findByText(title)).closest('tr')!).getAllByRole('cell')[2];
+  expect(await author('stored')).toHaveTextContent('Olena Koval');
+  expect(await author('owner')).toHaveTextContent('taras@example.com');
+  expect(await author('unknown')).toHaveTextContent('Another member');
+});
+
 it('shows an error with a working retry', async () => {
   __mock.fail('collection:reports', { code: 'HTTP_ERROR', status: 500, message: 'boom' });
   renderWithServices(<ReportsListPage onOpen={vi.fn()} onCreate={vi.fn()} />, await mockServices());

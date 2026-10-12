@@ -59,6 +59,11 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
     titleRef.current = title;
   });
 
+  // Warm the name the next save records; a failure only leaves the name out.
+  useEffect(() => {
+    void api.currentMemberName();
+  }, [api]);
+
   useEffect(() => {
     if (!reportId) return;
     let alive = true;
@@ -66,7 +71,9 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
       (found) => {
         if (!alive) return;
         if (!found) {
-          setError({ message: 'This report no longer exists.', retryable: false });
+          // An entity-bound collection hides a report whose data mart the member can't use,
+          // which a shared link makes common.
+          setError({ message: "This report doesn't exist, or you don't have access to its data mart.", retryable: false });
           setStatus('error');
           return;
         }
@@ -92,12 +99,17 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
       if (!current) throw new Error('Choose a data mart first.');
       const previous = asCopy ? {} : savedRef.current;
       const nextTitle = titleOverride ?? titleRef.current;
+      const name = (await api.currentMemberName()) ?? undefined;
+      const createdBy = previous.report?.createdBy ?? userId;
       const report: StoredReport = {
         schemaVersion: 1,
         title: nextTitle,
         draft: current,
-        createdBy: previous.report?.createdBy ?? userId,
+        createdBy,
         updatedBy: userId,
+        // An author's own save fills in a name their older report lacks.
+        createdByName: previous.report?.createdByName ?? (createdBy === userId ? name : undefined),
+        updatedByName: name,
         linkedReport: linkedReport === null ? undefined : (linkedReport ?? previous.report?.linkedReport),
       };
       const result = await store.save({ id: previous.id, report, previousParentId: previous.report?.draft.mainDataMartId });
@@ -107,7 +119,7 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
       setTitle(nextTitle);
       return result;
     },
-    [store, userId],
+    [store, api, userId],
   );
 
   const syncLinked = useCallback(

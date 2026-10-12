@@ -43,6 +43,52 @@ it("saves someone else's report as a copy without touching the original", async 
   expect(__mock.state.collections.get('reports')!.get('theirs')?.document).toMatchObject({ title: 'Theirs' });
 });
 
+describe('author names', () => {
+  // As the host stores it: JSON, so an undefined name is no key at all.
+  const stored = (id: string) => JSON.parse(JSON.stringify(__mock.state.collections.get('reports')!.get(id)?.document)) as object;
+
+  it('records who created and who last saved the report', async () => {
+    const services = await mockServices();
+    const { result } = renderHook(() => useReportDocument(undefined), { wrapper: wrapperFor(services) });
+    act(() => result.current.setDraft(visitorDraft()));
+    await act(async () => void (await result.current.saveDraft()));
+    expect(stored(result.current.savedId!)).toMatchObject({ createdByName: 'Demo User', updatedByName: 'Demo User' });
+  });
+
+  it("keeps the author's name when another member saves", async () => {
+    __mock.seedReport('theirs', {
+      schemaVersion: 1, title: 'Theirs', draft: visitorDraft(), createdBy: 'someone', updatedBy: 'someone', createdByName: 'Olena',
+    });
+    const services = await mockServices();
+    const { result } = renderHook(() => useReportDocument('theirs'), { wrapper: wrapperFor(services) });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    await act(async () => void (await result.current.saveDraft()));
+    expect(stored('theirs')).toMatchObject({ createdBy: 'someone', createdByName: 'Olena', updatedByName: 'Demo User' });
+  });
+
+  it("fills in the author's name on their own older report, never on someone else's", async () => {
+    __mock.seedReport('mine', { schemaVersion: 1, title: 'Mine', draft: visitorDraft(), createdBy: 'demo-user', updatedBy: 'demo-user' });
+    __mock.seedReport('theirs', { schemaVersion: 1, title: 'Theirs', draft: visitorDraft(), createdBy: 'someone', updatedBy: 'someone' });
+    const services = await mockServices();
+    for (const id of ['mine', 'theirs']) {
+      const { result } = renderHook(() => useReportDocument(id), { wrapper: wrapperFor(services) });
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      await act(async () => void (await result.current.saveDraft()));
+    }
+    expect(stored('mine')).toMatchObject({ createdByName: 'Demo User' });
+    expect(stored('theirs')).not.toHaveProperty('createdByName');
+  });
+
+  it('still saves when the name cannot be read', async () => {
+    __mock.fail('/api/auth/context', { code: 'HTTP_ERROR', status: 500, message: 'boom' });
+    const services = await mockServices();
+    const { result } = renderHook(() => useReportDocument(undefined), { wrapper: wrapperFor(services) });
+    act(() => result.current.setDraft(visitorDraft()));
+    await act(async () => void (await result.current.saveDraft()));
+    expect(stored(result.current.savedId!)).not.toHaveProperty('createdByName');
+  });
+});
+
 it('creates a linked Google Sheets report and then updates it on request, never on a plain save', async () => {
   const services = await mockServices();
   const { result } = renderHook(() => useReportDocument(undefined), { wrapper: wrapperFor(services) });
