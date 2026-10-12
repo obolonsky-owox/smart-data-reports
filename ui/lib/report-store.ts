@@ -2,6 +2,9 @@ import type { ReportDraft } from './report-draft';
 
 export const REPORTS_COLLECTION = 'reports';
 
+/** The longest description a report keeps, in characters. */
+export const DESCRIPTION_LIMIT = 1024;
+
 export interface LinkedReport {
   reportId: string;
   destinationId: string;
@@ -16,6 +19,8 @@ export interface LinkedReport {
 export interface StoredReport {
   schemaVersion: 1;
   title: string;
+  /** Free-text notes on the report, shared like the rest of it; absent when empty. */
+  description?: string;
   draft: ReportDraft;
   createdBy: string;
   updatedBy: string;
@@ -106,6 +111,7 @@ export function parseStoredReport(value: unknown): StoredReport | null {
   return {
     schemaVersion: 1,
     title: value.title,
+    ...(typeof value.description === 'string' && value.description ? { description: value.description.slice(0, DESCRIPTION_LIMIT) } : {}),
     createdBy: typeof value.createdBy === 'string' ? value.createdBy : '',
     updatedBy: typeof value.updatedBy === 'string' ? value.updatedBy : '',
     ...(typeof value.createdByName === 'string' && value.createdByName ? { createdByName: value.createdByName } : {}),

@@ -375,6 +375,53 @@ it("asks before a Google Sheets report is created from someone else's report", a
   expect(reports().get('theirs')!.document).toEqual(theirs);
 });
 
+describe('the description', () => {
+  const queries = () => __mock.state.requests.filter((r) => r.path.startsWith('/api/external/http-data/')).length;
+
+  async function openDescription(report: StoredReport) {
+    __mock.seedReport('r1', report);
+    renderWithServices(<EditorPage reportId='r1' onBack={vi.fn()} />, await mockServices());
+    await userEvent.click(await screen.findByRole('tab', { name: 'Description' }));
+    return screen.getByRole('textbox', { name: 'Report description' });
+  }
+
+  it('comes last, after SQL', async () => {
+    await openDescription({ ...theirs, createdBy: 'demo-user' });
+    const [editorTabs] = screen.getAllByRole('tablist');
+    expect(within(editorTabs!).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Data table', 'Data Marts Relationships', 'SQL', 'Description']);
+  });
+
+  it('saves with the report without running the query', async () => {
+    const box = await openDescription({ ...theirs, createdBy: 'demo-user', description: 'Old note' });
+    expect(box).toHaveValue('Old note');
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+    await userEvent.clear(box);
+    await userEvent.type(box, 'Weekly check');
+    expect(screen.getByText(/^12 \/ 1024/)).toBeInTheDocument();
+    await userEvent.click(save);
+    await waitFor(() => expect(reports().get('r1')!.document).toMatchObject({ description: 'Weekly check', title: 'Theirs' }));
+    expect(save).toBeDisabled();
+    expect(queries()).toBe(0);
+  });
+
+  it('keeps at most 1024 characters', async () => {
+    const box = await openDescription({ ...theirs, createdBy: 'demo-user' });
+    expect(box).toHaveAttribute('maxLength', '1024');
+  });
+
+  it("asks before overwriting someone else's description", async () => {
+    const box = await openDescription(theirs);
+    await userEvent.type(box, 'Mine now');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Save as copy' }));
+    await waitFor(() => expect(reports().size).toBe(2));
+    expect(reports().get('r1')!.document).toEqual(theirs);
+    const copy = [...reports().values()].find((d) => d.id !== 'r1')!.document as StoredReport;
+    expect(copy).toMatchObject({ title: 'Theirs (copy)', description: 'Mine now', createdBy: 'demo-user' });
+  });
+});
+
 it('offers another data mart when the saved one is no longer available', async () => {
   __mock.seedReport('lost', {
     schemaVersion: 1, title: 'Lost', createdBy: 'demo-user', updatedBy: 'demo-user',
