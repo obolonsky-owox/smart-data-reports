@@ -1,7 +1,7 @@
 import { DM } from '../fixtures/smart-data';
 import { emptyDraft } from './report-draft';
 import {
-  configHash, createReportStore, parseStoredReport,
+  configHash, createReportStore, DESCRIPTION_LIMIT, parseStoredReport,
   type CollectionDoc, type CollectionLike, type StoredReport,
 } from './report-store';
 
@@ -81,6 +81,14 @@ describe('parseStoredReport', () => {
     expect(parsed?.draft).toEqual(emptyDraft(DM.visitor));
     expect(parseStoredReport({ schemaVersion: 2 })).toBeNull();
     expect(parseStoredReport('nope')).toBeNull();
+  });
+
+  it('keeps a description up to the limit and drops an empty or malformed one', () => {
+    const parse = (description: unknown) =>
+      parseStoredReport({ schemaVersion: 1, title: 'T', draft: { mainDataMartId: DM.visitor }, description });
+    expect(parse('Notes')?.description).toBe('Notes');
+    expect(parse('x'.repeat(DESCRIPTION_LIMIT + 5))?.description).toHaveLength(DESCRIPTION_LIMIT);
+    for (const value of ['', 42, undefined]) expect(parse(value)).not.toHaveProperty('description');
   });
 
   it("keeps a link's data mart only when it is recorded", () => {

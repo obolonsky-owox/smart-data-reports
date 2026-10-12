@@ -3,7 +3,7 @@ import { useServices } from '../../services';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import type { ReportRunStatus } from '../../lib/odm-types';
 import type { ReportDraft } from '../../lib/report-draft';
-import { stableHash, type LinkedReport, type SavedReport, type StoredReport } from '../../lib/report-store';
+import { DESCRIPTION_LIMIT, stableHash, type LinkedReport, type SavedReport, type StoredReport } from '../../lib/report-store';
 import { createLinkedReport, updateLinkedReport, type SyncOutcome } from '../../lib/sheets-sync';
 
 export type SaveOutcome =
@@ -29,6 +29,8 @@ export interface ReportDocument {
   saved?: StoredReport;
   title: string;
   setTitle(title: string): void;
+  description: string;
+  setDescription(description: string): void;
   draft: ReportDraft | null;
   setDraft: Dispatch<SetStateAction<ReportDraft | null>>;
   dirty: boolean;
@@ -47,16 +49,19 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
   const [error, setError] = useState<UserFacingError>();
   const [saved, setSaved] = useState<{ id?: string; report?: StoredReport }>({});
   const [title, setTitle] = useState('Untitled report');
+  const [description, setDescription] = useState('');
   const [draft, setDraft] = useState<ReportDraft | null>(null);
 
   // Saves can run back-to-back (save → create Sheets report → save); refs give each step the latest state.
   const savedRef = useRef(saved);
   const draftRef = useRef(draft);
   const titleRef = useRef(title);
+  const descriptionRef = useRef(description);
   useLayoutEffect(() => {
     savedRef.current = saved;
     draftRef.current = draft;
     titleRef.current = title;
+    descriptionRef.current = description;
   });
 
   // Warm the name the next save records; a failure only leaves the name out.
@@ -79,6 +84,7 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
         }
         setSaved({ id: found.id, report: found.report });
         setTitle(found.report.title);
+        setDescription(found.report.description ?? '');
         setDraft(found.report.draft);
         setStatus('ready');
       },
@@ -104,6 +110,7 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
       const report: StoredReport = {
         schemaVersion: 1,
         title: nextTitle,
+        ...(descriptionRef.current.trim() ? { description: descriptionRef.current.slice(0, DESCRIPTION_LIMIT) } : {}),
         draft: current,
         createdBy,
         updatedBy: userId,
@@ -182,7 +189,10 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
 
   const dirty =
     draft !== null &&
-    (!saved.report || saved.report.title !== title || stableHash(saved.report.draft) !== stableHash(draft));
+    (!saved.report ||
+      saved.report.title !== title ||
+      (saved.report.description ?? '') !== (description.trim() ? description : '') ||
+      stableHash(saved.report.draft) !== stableHash(draft));
 
   return {
     status,
@@ -191,6 +201,8 @@ export function useReportDocument(reportId: string | undefined): ReportDocument 
     saved: saved.report,
     title,
     setTitle,
+    description,
+    setDescription,
     draft,
     setDraft,
     dirty,

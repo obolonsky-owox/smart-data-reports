@@ -32,6 +32,7 @@ import { ResultTable } from '../data-table/ResultTable';
 import { RelationshipCanvas } from '../canvas/RelationshipCanvas';
 import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
 import { SqlTab, type LastRunSql } from '../sql/SqlTab';
+import { DescriptionTab } from '../description/DescriptionTab';
 import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
 import { useQueryRun } from './use-query-run';
 import { useReportDocument } from './use-report-document';
@@ -40,7 +41,7 @@ import { useSchema } from './use-schema';
 
 interface PendingRemap { title: string; result: RemapResult; labels: string[] }
 /** What a non-author was about to do when the overwrite confirmation opened. */
-type GuardedAction = 'save' | 'create' | 'update';
+type GuardedAction = 'save' | 'saveOnly' | 'create' | 'update';
 
 const NARROW_QUERY = '(max-width: 899px)';
 const isNarrowScreen = () => window.matchMedia?.(NARROW_QUERY).matches ?? false;
@@ -273,6 +274,11 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   function perform(action: GuardedAction, asCopy: boolean) {
     if (action === 'save') {
       void applyAndSave(asCopy);
+      return;
+    }
+    if (action === 'saveOnly') {
+      // Nothing on screen changes on this save, so it says so.
+      void save(asCopy).then((ok) => ok && toast.success(asCopy ? 'Saved as your copy' : 'Report saved'));
       return;
     }
     if (!asCopy) {
@@ -569,6 +575,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                 <TabsTrigger value='table' className={UNDERLINE_TRIGGER}>Data table</TabsTrigger>
                 <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Data Marts Relationships</TabsTrigger>
                 <TabsTrigger value='sql' className={UNDERLINE_TRIGGER}>SQL</TabsTrigger>
+                <TabsTrigger value='description' className={UNDERLINE_TRIGGER}>Description</TabsTrigger>
               </TabsList>
               <TabsContent value='table'>
                 <ResultTable
@@ -608,6 +615,15 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   reportTitle={doc.title}
                   onCreateSheets={() => guard('create')}
                   onUpdateSheets={() => guard('update')}
+                />
+              </TabsContent>
+              <TabsContent value='description'>
+                <DescriptionTab
+                  value={doc.description}
+                  onChange={doc.setDescription}
+                  onSave={() => guard('saveOnly')}
+                  dirty={doc.dirty}
+                  saving={saving}
                 />
               </TabsContent>
             </Tabs>
@@ -687,7 +703,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
           <AlertDialogHeader>
             <AlertDialogTitle>This report belongs to another member</AlertDialogTitle>
             <AlertDialogDescription>
-              {guarded === 'save'
+              {guarded === 'save' || guarded === 'saveOnly'
                 ? 'Save your changes as your own copy, or overwrite their report for everyone.'
                 : 'Creating or updating a Google Sheets report saves this report. Continue with your own copy, or overwrite their report for everyone.'}
             </AlertDialogDescription>

@@ -43,6 +43,20 @@ it("saves someone else's report as a copy without touching the original", async 
   expect(__mock.state.collections.get('reports')!.get('theirs')?.document).toMatchObject({ title: 'Theirs' });
 });
 
+it('treats a description change as unsaved and an all-blank one as none', async () => {
+  __mock.seedReport('r1', { schemaVersion: 1, title: 'R', draft: visitorDraft(), createdBy: 'demo-user', updatedBy: 'demo-user' });
+  const services = await mockServices();
+  const { result } = renderHook(() => useReportDocument('r1'), { wrapper: wrapperFor(services) });
+  await waitFor(() => expect(result.current.status).toBe('ready'));
+  act(() => result.current.setDescription('   '));
+  expect(result.current.dirty).toBe(false);
+  act(() => result.current.setDescription('Note'));
+  expect(result.current.dirty).toBe(true);
+  await act(async () => void (await result.current.saveDraft()));
+  expect(result.current.dirty).toBe(false);
+  expect(result.current.saved?.description).toBe('Note');
+});
+
 describe('author names', () => {
   // As the host stores it: JSON, so an undefined name is no key at all.
   const stored = (id: string) => JSON.parse(JSON.stringify(__mock.state.collections.get('reports')!.get(id)?.document)) as object;
