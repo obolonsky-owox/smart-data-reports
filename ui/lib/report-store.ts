@@ -19,6 +19,9 @@ export interface StoredReport {
   draft: ReportDraft;
   createdBy: string;
   updatedBy: string;
+  /** Display names as of the save; absent on reports saved before names were recorded. */
+  createdByName?: string;
+  updatedByName?: string;
   linkedReport?: LinkedReport;
 }
 
@@ -105,6 +108,8 @@ export function parseStoredReport(value: unknown): StoredReport | null {
     title: value.title,
     createdBy: typeof value.createdBy === 'string' ? value.createdBy : '',
     updatedBy: typeof value.updatedBy === 'string' ? value.updatedBy : '',
+    ...(typeof value.createdByName === 'string' && value.createdByName ? { createdByName: value.createdByName } : {}),
+    ...(typeof value.updatedByName === 'string' && value.updatedByName ? { updatedByName: value.updatedByName } : {}),
     linkedReport: parseLinkedReport(value.linkedReport),
     draft: {
       mainDataMartId: draft.mainDataMartId,

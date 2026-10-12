@@ -13,12 +13,13 @@ import { useServices } from '../../services';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import { formatRelativeTime } from '../../lib/format';
 import type { SavedReport } from '../../lib/report-store';
+import { authorLabel } from '../../lib/authors';
 import { odmReportsPath } from '../../lib/sheets-sync';
 
 type State =
   | { status: 'loading' }
   | { status: 'error'; error: UserFacingError }
-  | { status: 'ready'; reports: SavedReport[]; martTitles: Map<string, string> };
+  | { status: 'ready'; reports: SavedReport[]; martTitles: Map<string, string>; people: Map<string, string> };
 
 export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void; onCreate(): void }) {
   const { store, snapshots, api, userId } = useServices();
@@ -27,14 +28,16 @@ export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
-    // Data mart titles are a nicety: without them the reports still list as "Unavailable data mart".
-    const [reports, marts] = await Promise.allSettled([store.listAll(), api.listDataMarts()]);
+    // Data mart titles and people's names are a nicety: without them the reports still list,
+    // as "Unavailable data mart" and "Another member".
+    const [reports, marts] = await Promise.allSettled([store.listAll(), api.listDataMartsWithPeople()]);
     if (reports.status === 'rejected') {
       setState({ status: 'error', error: describeError(reports.reason, 'saved reports') });
       return;
     }
-    const titles = marts.status === 'fulfilled' ? marts.value.map((m): [string, string] => [m.id, m.title]) : [];
-    setState({ status: 'ready', reports: reports.value, martTitles: new Map(titles) });
+    const titles = marts.status === 'fulfilled' ? marts.value.marts.map((m): [string, string] => [m.id, m.title]) : [];
+    const people = marts.status === 'fulfilled' ? marts.value.people : new Map<string, string>();
+    setState({ status: 'ready', reports: reports.value, martTitles: new Map(titles), people });
   }, [store, api]);
 
   useEffect(() => {
@@ -107,7 +110,7 @@ export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void
                     <td className='px-3 py-2 text-muted-foreground'>
                       {state.martTitles.get(r.report.draft.mainDataMartId) ?? 'Unavailable data mart'}
                     </td>
-                    <td className='px-3 py-2 text-muted-foreground'>{r.report.createdBy === userId ? 'You' : 'Another member'}</td>
+                    <td className='px-3 py-2 text-muted-foreground'>{authorLabel(r.report, userId, state.people)}</td>
                     <td className='px-3 py-2 text-muted-foreground' title={r.updatedAt}>{formatRelativeTime(r.updatedAt)}</td>
                     {/* The menu is not part of the row's click: opening it must not open the report. */}
                     <td className='px-1 py-1 text-right' onClick={(e) => e.stopPropagation()}>

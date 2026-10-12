@@ -22,6 +22,16 @@ function freshState() {
     theme: 'light' as 'light' | 'dark',
     requests: [] as MockRequest[],
     navigations: [] as string[],
+    /** The route the next connect() opens at; undefined simulates a host without page links. */
+    route: '/' as string | undefined,
+    /** Every route the plugin reported, oldest first. */
+    routes: [] as string[],
+    /** Links copied, each the route showing at the time. */
+    copiedLinks: [] as string[],
+    /** The member `GET /api/auth/context` describes. */
+    member: { userId: 'demo-user', fullName: 'Demo User' as string | null, email: 'demo@example.com' as string | null },
+    /** Owners the data mart list names on its first data mart. */
+    martOwners: [] as { userId: string; fullName?: string | null; email?: string | null }[],
     opened: [] as string[],
     rows: (columns: string[]): Row[] => sampleRows(columns, 120),
     lastRows: [] as Row[],
@@ -87,7 +97,7 @@ const owox = {
   dataMarts: {
     async list() {
       maybeFail('/api/data-marts', 'GET');
-      return DATA_MARTS;
+      return DATA_MARTS.map((mart, i) => ({ ...mart, createdByUser: null, businessOwnerUsers: i === 0 ? state.martOwners : [] }));
     },
     async traverseData(
       id: string,
@@ -133,6 +143,11 @@ const owox = {
       return { totals: totalsOf(state.lastRows), additionalParams: { httpData } } as T;
     }
     if (path === '/api/data-destinations/by-type/GOOGLE_SHEETS') return state.destinations as T;
+    if (path === '/api/auth/context') {
+      // The plugin-token shape: flat member fields and authFlow 'plugin', which the client's
+      // auth.getContext() rejects.
+      return { ...state.member, projectId: 'demo-project', authFlow: 'plugin', roles: ['viewer'] } as T;
+    }
     if (/\/generated-sql$/.test(path)) {
       const report = state.reports.get(id(/^\/api\/reports\/([^/]+)\//));
       if (!report) throw notFound();
@@ -220,6 +235,7 @@ export async function connect(): Promise<PluginContext> {
     projectId: 'demo-project',
     userId: 'demo-user',
     theme: state.theme,
+    route: state.route,
     owox,
     credentials: {},
     collections: (name: string) => collection(name),
@@ -229,6 +245,13 @@ export async function connect(): Promise<PluginContext> {
       },
       navigate(path: string) {
         state.navigations.push(path);
+      },
+      setRoute(path: string) {
+        state.routes.push(path);
+      },
+      async copyLink(path?: string) {
+        if (state.route === undefined) throw new Error('This host does not support page links.');
+        state.copiedLinks.push(path ?? state.routes.at(-1) ?? state.route);
       },
     },
     signal: new AbortController().signal,

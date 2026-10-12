@@ -1,16 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PluginContext } from '@owox/plugin-sdk';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@owox/ui/components/tooltip';
 import { ServicesProvider, servicesFromContext } from './services';
 import { ReportsListPage } from './features/reports-list/ReportsListPage';
 import { EditorPage } from './features/editor/EditorPage';
-
-type Screen = { kind: 'list' } | { kind: 'editor'; reportId?: string };
+import { routeOf, screenOf, type Screen } from './lib/routes';
 
 export function App({ context }: { context: PluginContext }) {
   const services = useMemo(() => servicesFromContext(context), [context]);
-  const [screen, setScreen] = useState<Screen>({ kind: 'list' });
+  // A shared link only chooses the first screen; it never saves or runs anything by itself.
+  const [screen, setScreen] = useState<Screen>(() => screenOf(services.route));
+
+  useEffect(() => {
+    services.setRoute(routeOf(screen));
+  }, [services, screen]);
 
   return (
     <ServicesProvider services={services}>

@@ -15,6 +15,14 @@ export interface Services {
   pollIntervalMs: number;
   openExternal(url: string): void;
   navigate(path: string): void;
+  /** The route the host opened the plugin at; undefined on a host without page links. */
+  route: string | undefined;
+  /** False on a host without page links: there is nothing to share and no address to keep. */
+  linksSupported: boolean;
+  /** Tells the host which page is showing, so the browser address is a link to it. */
+  setRoute(path: string): void;
+  /** Copies a link to the page showing now, the same address the browser shows. */
+  copyLink(): Promise<void>;
 }
 
 const ServicesContext = createContext<Services | null>(null);
@@ -41,5 +49,11 @@ export function servicesFromContext(ctx: PluginContext): Services {
     pollIntervalMs: 2000,
     openExternal: (url) => void ctx.ui.openExternal(url),
     navigate: (path) => ctx.ui.navigate(path),
+    route: ctx.route,
+    linksSupported: ctx.route !== undefined,
+    setRoute: (path) => {
+      if (ctx.route !== undefined) ctx.ui.setRoute(path);
+    },
+    copyLink: () => ctx.ui.copyLink(),
   };
 }

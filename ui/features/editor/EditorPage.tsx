@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Columns3, PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
+import { ArrowLeft, Columns3, Link2, PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -35,6 +35,7 @@ import { SqlTab, type LastRunSql } from '../sql/SqlTab';
 import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
 import { useQueryRun } from './use-query-run';
 import { useReportDocument } from './use-report-document';
+import { routeOf } from '../../lib/routes';
 import { useSchema } from './use-schema';
 
 interface PendingRemap { title: string; result: RemapResult; labels: string[] }
@@ -57,8 +58,20 @@ export function EditorPage(props: EditorPageProps) {
 }
 
 function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): void }) {
-  const { api, snapshots, theme } = useServices();
+  const { api, snapshots, theme, linksSupported, setRoute, copyLink } = useServices();
   const doc = useReportDocument(reportId);
+  const savedId = doc.savedId;
+
+  // The first save of a new report, a save as copy and a data mart change all give the report
+  // a new id; the browser address follows it so a copied link opens what is on screen.
+  useEffect(() => {
+    if (savedId && savedId !== reportId) setRoute(routeOf({ kind: 'editor', reportId: savedId }));
+  }, [savedId, reportId, setRoute]);
+
+  function share() {
+    // The host copies and confirms; it refuses while another copy is pending.
+    copyLink().catch(() => toast.error("Couldn't copy the link. Try again."));
+  }
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
   const [martsError, setMartsError] = useState<UserFacingError | null>(null);
   const [startStorageId, setStartStorageId] = useState('');
@@ -170,7 +183,6 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   // The member's last result of the saved configuration, kept for the next time they open the report.
   const savedHash = doc.saved ? configHash(doc.saved.draft) : null;
-  const savedId = doc.savedId;
   const written = useRef<string | null>(null);
   useEffect(() => {
     const s = query.state;
@@ -301,6 +313,17 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       </div>
       {editing && draft && (
         <div className='flex items-center gap-2'>
+          {linksSupported && (
+            <Button
+              variant='outline'
+              disabled={!savedId}
+              title={savedId ? 'Copy a link to this report' : 'Save the report to share a link to it'}
+              onClick={share}
+            >
+              <Link2 className='h-4 w-4' />
+              Share
+            </Button>
+          )}
           <Button variant='outline' disabled={!index || !draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
             <Sheet className='h-4 w-4' />
             {linked ? 'Update Google Sheets' : 'Create Google Sheets report'}

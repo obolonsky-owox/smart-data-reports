@@ -38,6 +38,8 @@ Read first: `docs/superpowers/specs/2026-10-02-smart-data-reports-design.md`, th
 | `ui/lib/odm-api.ts` | Typed calls through `ctx.owox`. |
 | `ui/lib/report-store.ts` | Saved reports in the `reports` collection. |
 | `ui/lib/run-snapshot.ts` | Each member's last result of a saved report in the `snapshots` collection. |
+| `ui/lib/routes.ts` | Page routes for shareable links (`/`, `/reports/<id>`); a route only chooses what to show. |
+| `ui/lib/authors.ts` | Report author names: stored on save, else borrowed from the data mart list. |
 | `ui/lib/sheets-sync.ts` | Create/update the linked ODM Google Sheets report. |
 | `ui/lib/canvas-model.ts` | Draft → canvas nodes, edges and layout. |
 | `ui/features/*` | React screens; props-driven, tested against `ui/sdk-mock.ts`. |

@@ -2,6 +2,7 @@ import type {
   BlendableSchema, DataMartSummary, RelationshipGraph, ReportRunStatus, ReportSummary, Row,
   SheetsDestination, SpreadsheetRef, Totals,
 } from './odm-types';
+import { nameOf, peopleOf } from './authors';
 import { ROW_CAP, type ReportConfig, type TraverseOptions } from './read-plan';
 
 export interface Traversal {
@@ -13,7 +14,7 @@ export interface Traversal {
 /** The subset of `ctx.owox` this plugin uses. */
 export interface OwoxClient {
   dataMarts: {
-    list(): Promise<DataMartSummary[]>;
+    list(): Promise<unknown[]>;
     traverseData(dataMartId: string, options: TraverseOptions): Promise<Traversal>;
   };
   getJson<T>(path: string, query?: Record<string, string>): Promise<T>;
@@ -80,8 +81,8 @@ function reportableMart(item: unknown): DataMartSummary | null {
 }
 
 /** Pages `/api/data-marts` without the client's strict validation of every item. */
-async function listDataMartsLeniently(owox: OwoxClient): Promise<DataMartSummary[]> {
-  const marts: DataMartSummary[] = [];
+async function listDataMartsLeniently(owox: OwoxClient): Promise<unknown[]> {
+  const marts: unknown[] = [];
   const seen = new Set<number>();
   let offset = 0;
   for (;;) {
@@ -91,10 +92,7 @@ async function listDataMartsLeniently(owox: OwoxClient): Promise<DataMartSummary
       '/api/data-marts',
       offset === 0 ? undefined : { offset: String(offset) },
     );
-    for (const item of Array.isArray(page?.items) ? page.items : []) {
-      const mart = reportableMart(item);
-      if (mart) marts.push(mart);
-    }
+    if (Array.isArray(page?.items)) marts.push(...page.items);
     if (typeof page?.nextOffset !== 'number') return marts;
     offset = page.nextOffset;
   }
@@ -103,16 +101,38 @@ async function listDataMartsLeniently(owox: OwoxClient): Promise<DataMartSummary
 export function createOdmApi(owox: OwoxClient) {
   const getReport = (reportId: string) => owox.getJson<ReportSummary>(`/api/reports/${enc(reportId)}`);
 
+  async function listRawDataMarts(): Promise<unknown[]> {
+    try {
+      return await owox.dataMarts.list();
+    } catch {
+      // The client rejects the whole list over one item it doesn't recognise, e.g. a new storage type.
+      return listDataMartsLeniently(owox);
+    }
+  }
+  const reportable = (raw: unknown[]) =>
+    raw.flatMap((m) => reportableMart(m) ?? []).sort((a, b) => a.title.localeCompare(b.title));
+
+  let memberName: Promise<string | null> | undefined;
+
   return {
-    async listDataMarts(): Promise<DataMartSummary[]> {
-      let all: DataMartSummary[];
-      try {
-        all = (await owox.dataMarts.list()).flatMap((m) => reportableMart(m) ?? []);
-      } catch {
-        // The client rejects the whole list over one item it doesn't recognise, e.g. a new storage type.
-        all = await listDataMartsLeniently(owox);
-      }
-      return all.sort((a, b) => a.title.localeCompare(b.title));
+    listDataMarts: async (): Promise<DataMartSummary[]> => reportable(await listRawDataMarts()),
+
+    /** The reportable data marts plus the names of the people the whole list mentions. */
+    async listDataMartsWithPeople(): Promise<{ marts: DataMartSummary[]; people: Map<string, string> }> {
+      const raw = await listRawDataMarts();
+      return { marts: reportable(raw), people: peopleOf(raw) };
+    },
+
+    /**
+     * The current member's display name, or null when it can't be read. Read raw: the
+     * client's auth.getContext() accepts only API-key sessions and rejects a plugin's.
+     */
+    currentMemberName(): Promise<string | null> {
+      memberName ??= owox.getJson<unknown>('/api/auth/context').then(nameOf, () => {
+        memberName = undefined;
+        return null;
+      });
+      return memberName;
     },
 
     getBlendableSchema: (dataMartId: string) =>
