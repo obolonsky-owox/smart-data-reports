@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Columns3, Link2, PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
+import { ArrowLeft, Columns3, Link2, Loader2,PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -46,7 +46,7 @@ type GuardedAction = 'save' | 'saveOnly' | 'create' | 'update';
 const NARROW_QUERY = '(max-width: 899px)';
 const isNarrowScreen = () => window.matchMedia?.(NARROW_QUERY).matches ?? false;
 
-const UNDERLINE_LIST = 'h-auto w-full justify-start gap-6 rounded-none border-b border-border bg-transparent p-0';
+const UNDERLINE_LIST = 'h-auto min-w-0 flex-1 justify-start gap-6 rounded-none bg-transparent p-0';
 const UNDERLINE_TRIGGER =
   'flex-none rounded-none border-0 border-b-2 border-transparent px-1 pb-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none';
 
@@ -307,12 +307,19 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   /** `editing` adds the report's actions; only the editor layout has them. */
   const header = (editing = false) => (
     <header className='dm-page-header flex flex-wrap items-center justify-between gap-2'>
-      <div className='flex min-w-0 items-center gap-2'>
+      {/* The basis is how narrow the title gets before the actions wrap; the title grows from there. */}
+      <div className='flex min-w-0 flex-[1_1_12rem] items-center gap-2'>
         <Button variant='ghost' size='icon' onClick={() => (doc.dirty ? setConfirmBack(true) : onBack())} aria-label='Back to reports'>
           <ArrowLeft className='h-4 w-4' />
         </Button>
         {draft ? (
-          <Input aria-label='Report title' className='dm-page-header-title h-auto border-transparent px-1 shadow-none' value={doc.title} onChange={(e) => doc.setTitle(e.target.value)} />
+          // An input has no content width, so a hidden copy of the title sizes it: it is cut off only when the header is full.
+          <div className='grid min-w-0 grid-cols-[minmax(0,auto)]'>
+            <span aria-hidden className='dm-page-header-title invisible col-start-1 row-start-1 overflow-hidden border border-transparent px-1 whitespace-pre'>
+              {doc.title || ' '}
+            </span>
+            <Input aria-label='Report title' className='dm-page-header-title col-start-1 row-start-1 h-auto border-transparent px-1 shadow-none' value={doc.title} onChange={(e) => doc.setTitle(e.target.value)} />
+          </div>
         ) : (
           <h1 className='dm-page-header-title'>New report</h1>
         )}
@@ -527,6 +534,10 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     if (first) void changeMain(first.id);
   };
 
+  const onApply = () => (doc.dirty && !doc.isAuthor ? setGuarded('save') : void applyAndSave());
+  const applyDisabled = !index || issues.length > 0 || saving || (shownCurrent && !doc.dirty);
+  const applying = saving || query.state.status === 'running';
+
   const panel = (
     <ColumnPanel
       index={index}
@@ -550,12 +561,14 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onRemoveColumn={(name) => edit((d) => removeColumn(d, name))}
       onPendingFilterDone={() => setFilterRequest(null)}
       onChangeMain={(id, origin) => void changeMain(id, origin)}
-      onApply={() => (doc.dirty && !doc.isAuthor ? setGuarded('save') : void applyAndSave())}
-      applyDisabled={!index || issues.length > 0 || saving || (shownCurrent && !doc.dirty)}
-      applying={saving || query.state.status === 'running'}
+      onApply={onApply}
+      applyDisabled={applyDisabled}
+      applying={applying}
       issues={visibleIssues}
     />
   );
+  // With the panel closed, changes made on the table would wait for its Apply & Save unseen.
+  const applyOutside = !panelShown && draft.columns.length > 0 && applied !== hash;
 
   return (
     <div className='dm-page flex h-full flex-col' data-testid='editorPage'>
@@ -571,12 +584,20 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
             </div>
           ) : (
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className={UNDERLINE_LIST}>
-                <TabsTrigger value='table' className={UNDERLINE_TRIGGER}>Data table</TabsTrigger>
-                <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Data Marts Relationships</TabsTrigger>
-                <TabsTrigger value='sql' className={UNDERLINE_TRIGGER}>SQL</TabsTrigger>
-                <TabsTrigger value='description' className={UNDERLINE_TRIGGER}>Description</TabsTrigger>
-              </TabsList>
+              <div className='flex items-center gap-4 border-b border-border'>
+                <TabsList className={UNDERLINE_LIST}>
+                  <TabsTrigger value='table' className={UNDERLINE_TRIGGER}>Data table</TabsTrigger>
+                  <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Data Marts Relationships</TabsTrigger>
+                  <TabsTrigger value='sql' className={UNDERLINE_TRIGGER}>SQL</TabsTrigger>
+                  <TabsTrigger value='description' className={UNDERLINE_TRIGGER}>Description</TabsTrigger>
+                </TabsList>
+                {applyOutside && (
+                  <Button size='sm' className='h-7 shrink-0' disabled={applyDisabled} title={visibleIssues[0]} onClick={onApply}>
+                    {applying && <Loader2 className='h-4 w-4 animate-spin' />}
+                    Apply & Save
+                  </Button>
+                )}
+              </div>
               <TabsContent value='table'>
                 <ResultTable
                   index={index}
