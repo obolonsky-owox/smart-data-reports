@@ -36,7 +36,7 @@ async function startVisitorReport() {
 
 const lastQuery = () =>
   [...__mock.state.requests].reverse().find((r) => r.path.startsWith('/api/external/http-data/')) as
-    | { body: { column: string[]; filter: unknown[] | null; limit: number } }
+    | { body: { column: string[]; filter: unknown[] | null; sort: unknown[] | null; limit: number } }
     | undefined;
 
 it('builds a report from scratch with a 30-day default period and shows rows', async () => {
@@ -539,6 +539,22 @@ describe('the column panel layout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show column panel' }));
     expect(screen.getByTestId('columnPanel')).toBeInTheDocument();
     expect(panelWidth()).toBe('396px');
+  });
+
+  it('offers Apply & Save above the table while the panel is hidden and the table has unapplied changes', async () => {
+    await startVisitorReport();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+    await userEvent.click(screen.getByTestId('apply'));
+    await screen.findByText('1–100 of 120');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide column panel' }));
+    expect(screen.queryByRole('button', { name: 'Apply & Save' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Column options for Email' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Z → A' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Apply & Save' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Apply & Save' })).not.toBeInTheDocument());
+    expect(lastQuery()?.body).toMatchObject({ column: ['email'], sort: [{ column: 'email', direction: 'desc' }] });
+    expect(screen.queryByTestId('columnPanel')).not.toBeInTheDocument();
   });
 
   it.each([
