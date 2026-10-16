@@ -569,6 +569,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   );
   // With the panel closed, changes made on the table would wait for its Apply & Save unseen.
   const applyOutside = !panelShown && draft.columns.length > 0 && applied !== hash;
+  // Cancel puts the report back to what the table shows; before a first result there is nothing to go back to.
+  const revertible = query.state.status === 'success' ? query.state.appliedDraft : null;
 
   return (
     <div className='dm-page flex h-full flex-col' data-testid='editorPage'>
@@ -592,10 +594,24 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   <TabsTrigger value='description' className={UNDERLINE_TRIGGER}>Description</TabsTrigger>
                 </TabsList>
                 {applyOutside && (
-                  <Button size='sm' className='h-7 shrink-0' disabled={applyDisabled} title={visibleIssues[0]} onClick={onApply}>
-                    {applying && <Loader2 className='h-4 w-4 animate-spin' />}
-                    Apply & Save
-                  </Button>
+                  // At the top of the row, the buttons' centre meets the tab labels, which sit above their underline.
+                  <div className='flex shrink-0 items-center gap-1 self-start'>
+                    {revertible && (
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        className='h-7 text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent'
+                        disabled={saving}
+                        onClick={() => doc.setDraft(revertible)}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    <Button size='sm' className='h-7' disabled={applyDisabled} title={visibleIssues[0]} onClick={onApply}>
+                      {applying && <Loader2 className='h-4 w-4 animate-spin' />}
+                      Apply & Save
+                    </Button>
+                  </div>
                 )}
               </div>
               <TabsContent value='table'>

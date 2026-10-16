@@ -557,6 +557,25 @@ describe('the column panel layout', () => {
     expect(screen.queryByTestId('columnPanel')).not.toBeInTheDocument();
   });
 
+  it('cancels the changes made on the table back to what it shows', async () => {
+    await startVisitorReport();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email (Visitor)' }));
+    await userEvent.click(screen.getByTestId('apply'));
+    await screen.findByText('1–100 of 120');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide column panel' }));
+    const queries = __mock.state.requests.length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Column options for Email' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Z → A' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: 'Apply & Save' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(__mock.state.requests).toHaveLength(queries);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Column options for Email' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Unsorted' })).toBeChecked();
+  });
+
   it.each([
     ['wide', false],
     ['narrow', true],
