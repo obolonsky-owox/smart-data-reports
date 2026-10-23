@@ -12,7 +12,7 @@ if (!checkout) {
 }
 
 const COMPONENTS = [
-  'alert', 'alert-dialog', 'badge', 'button', 'checkbox', 'dialog', 'dropdown-menu', 'empty',
+  'alert', 'alert-dialog', 'badge', 'button', 'button-group', 'checkbox', 'dialog', 'dropdown-menu', 'empty',
   'collapsible', 'hover-card', 'input', 'popover', 'select', 'separator', 'sheet', 'skeleton', 'switch', 'tabs', 'tooltip',
 ];
 const LIB = ['utils.ts', 'dismissable-portals.ts'];

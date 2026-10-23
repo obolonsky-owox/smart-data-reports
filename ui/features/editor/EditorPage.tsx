@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Columns3, Link2, Loader2,PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Columns3, Link2, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, Sheet } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@owox/ui/components/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@owox/ui/components/alert-dialog';
 import { Button } from '@owox/ui/components/button';
+import { ButtonGroup } from '@owox/ui/components/button-group';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@owox/ui/components/dropdown-menu';
 import { Input } from '@owox/ui/components/input';
 import { Sheet as SidePanel, SheetContent, SheetHeader, SheetTitle } from '@owox/ui/components/sheet';
 import { Skeleton } from '@owox/ui/components/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@owox/ui/components/tabs';
 import { useServices } from '../../services';
 import { DataMartPicker } from '../../components/DataMartPicker';
+import { GoogleSheetsIcon } from '../../components/GoogleSheetsIcon';
 import { NativeSelect } from '../../components/NativeSelect';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import type { DataMartSummary } from '../../lib/odm-types';
@@ -31,6 +34,7 @@ import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
 import { ResultTable } from '../data-table/ResultTable';
 import { RelationshipCanvas } from '../canvas/RelationshipCanvas';
 import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
+import { spreadsheetLabel, spreadsheetUrl } from '../../lib/sheets-sync';
 import { SqlTab, type LastRunSql } from '../sql/SqlTab';
 import { DescriptionTab } from '../description/DescriptionTab';
 import { PanelResizeHandle, usePanelWidth } from './PanelResizeHandle';
@@ -59,7 +63,7 @@ export function EditorPage(props: EditorPageProps) {
 }
 
 function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): void }) {
-  const { api, snapshots, theme, linksSupported, setRoute, copyLink } = useServices();
+  const { api, snapshots, theme, linksSupported, setRoute, copyLink, openExternal } = useServices();
   const doc = useReportDocument(reportId);
   const savedId = doc.savedId;
 
@@ -295,6 +299,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   }
 
   const openSheets = () => guard(linked ? 'update' : 'create');
+  const sheetsDisabled = !index || !draft?.columns.length || issues.length > 0 || saving;
 
   const panelShown = narrow ? panelOpen : !panelHidden;
   function togglePanel() {
@@ -337,10 +342,38 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
               Share
             </Button>
           )}
-          <Button variant='outline' disabled={!index || !draft.columns.length || issues.length > 0 || saving} onClick={openSheets}>
-            <Sheet className='h-4 w-4' />
-            {linked ? 'Update Google Sheets' : 'Create Google Sheets report'}
-          </Button>
+          {linked ? (
+            // Opening the spreadsheet needs nothing from the draft, so only the update waits for a valid report.
+            <ButtonGroup className='min-w-0'>
+              <Button
+                variant='outline'
+                className='min-w-0 max-w-64'
+                title={`Open “${spreadsheetLabel(linked)}” in Google Sheets`}
+                onClick={() => openExternal(spreadsheetUrl(linked))}
+              >
+                <GoogleSheetsIcon className='size-4' />
+                <span className='truncate'>{spreadsheetLabel(linked)}</span>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant='outline' size='icon' aria-label='More Google Sheets actions' className='group'>
+                    <ChevronDown className='size-4 transition-transform duration-200 group-data-[state=open]:rotate-180' aria-hidden='true' />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end'>
+                  <DropdownMenuItem disabled={sheetsDisabled} onSelect={openSheets}>
+                    <RefreshCw className='h-4 w-4' />
+                    Update Google Sheets
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
+          ) : (
+            <Button variant='outline' disabled={sheetsDisabled} onClick={openSheets}>
+              <Sheet className='h-4 w-4' />
+              Create Google Sheets report
+            </Button>
+          )}
           <Button variant='ghost' size='icon' aria-label={panelShown ? 'Hide column panel' : 'Show column panel'} onClick={togglePanel}>
             {panelShown ? <PanelRightClose className='h-4 w-4' /> : <PanelRightOpen className='h-4 w-4' />}
           </Button>

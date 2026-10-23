@@ -7,6 +7,9 @@ import { errorStatus } from './errors';
 
 export type SheetsApi = Pick<OdmApi, 'createSpreadsheet' | 'createReport' | 'updateReport' | 'runReportAndWait'>;
 
+/** ODM names a spreadsheet created without a title this way. */
+const DEFAULT_SPREADSHEET_TITLE = 'OWOX Report';
+
 export interface SyncOutcome { linked: LinkedReport; runStatus: ReportRunStatus; runError?: string }
 
 /**
@@ -35,6 +38,8 @@ export async function createLinkedReport(
     sheetId: sheet.sheetId,
     syncedDraftHash: configHash(input.draft),
     dataMartId: input.draft.mainDataMartId,
+    // ODM names the file after the trimmed title; the plugin cannot read the name back later.
+    spreadsheetTitle: input.title.trim() || DEFAULT_SPREADSHEET_TITLE,
   };
   await onLinked(linked);
   const run = await api.runReportAndWait(id, wait);
@@ -69,6 +74,11 @@ export function spreadsheetUrl(linked: Pick<LinkedReport, 'spreadsheetId' | 'she
 }
 
 /** The data mart's Destinations tab; with `reportId`, ODM opens that report's sheet, like its own "Copy link". */
+/** The linked spreadsheet's name for display; a link stored before names were recorded has none. */
+export function spreadsheetLabel(linked: Pick<LinkedReport, 'spreadsheetTitle'>): string {
+  return linked.spreadsheetTitle ?? 'Open spreadsheet';
+}
+
 export function odmReportsPath(projectId: string, dataMartId: string, reportId?: string): string {
   const path = `/ui/${encodeURIComponent(projectId)}/data-marts/${encodeURIComponent(dataMartId)}/reports`;
   return reportId ? `${path}?reportId=${encodeURIComponent(reportId)}` : path;

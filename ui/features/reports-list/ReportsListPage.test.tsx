@@ -31,6 +31,20 @@ it('lists saved reports with their data mart and author', async () => {
   expect(onOpen).toHaveBeenCalledWith('r2');
 });
 
+it('links each report to its Google Sheets spreadsheet by name, without opening the report', async () => {
+  const link = { reportId: 'odm-7', destinationId: 'dest-sheets', spreadsheetId: 'abc', sheetId: 3, syncedDraftHash: 'h' };
+  __mock.seedReport('r1', { schemaVersion: 1, title: 'Visitors by source', draft: emptyDraft(DM.visitor), createdBy: 'demo-user', updatedBy: 'demo-user',
+    linkedReport: { ...link, spreadsheetTitle: 'Visitors for Q4' } });
+  __mock.seedReport('r2', { schemaVersion: 1, title: 'Sessions', draft: emptyDraft(DM.session), createdBy: 'demo-user', updatedBy: 'demo-user' });
+  const onOpen = vi.fn();
+  renderWithServices(<ReportsListPage onOpen={onOpen} onCreate={vi.fn()} />, await mockServices());
+  expect(await screen.findByRole('columnheader', { name: 'Google Sheets' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Visitors for Q4' }));
+  expect(__mock.state.opened).toEqual(['https://docs.google.com/spreadsheets/d/abc/edit#gid=3']);
+  expect(onOpen).not.toHaveBeenCalled();
+  expect(within(screen.getByText('Sessions').closest('tr')!).getByText('—')).toBeInTheDocument();
+});
+
 it("names other members' reports by the stored name, else by the data mart list", async () => {
   const seed = (id: string, createdBy: string, extra: Partial<StoredReport> = {}) =>
     __mock.seedReport(id, { schemaVersion: 1, title: id, draft: emptyDraft(DM.visitor), createdBy, updatedBy: createdBy, ...extra });
@@ -39,7 +53,7 @@ it("names other members' reports by the stored name, else by the data mart list"
   seed('unknown', 'u3');
   __mock.state.martOwners = [{ userId: 'u2', fullName: null, email: 'taras@example.com' }];
   renderWithServices(<ReportsListPage onOpen={vi.fn()} onCreate={vi.fn()} />, await mockServices());
-  const author = async (title: string) => within((await screen.findByText(title)).closest('tr')!).getAllByRole('cell')[2];
+  const author = async (title: string) => within((await screen.findByText(title)).closest('tr')!).getAllByRole('cell')[3];
   expect(await author('stored')).toHaveTextContent('Olena Koval');
   expect(await author('owner')).toHaveTextContent('taras@example.com');
   expect(await author('unknown')).toHaveTextContent('Another member');
