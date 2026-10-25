@@ -99,6 +99,14 @@ describe('parseStoredReport', () => {
     expect(parse({ ...link, dataMartId: 7 })).toEqual(link);
     expect(parse(link)).toEqual(link);
   });
+
+  it("keeps a link's spreadsheet name only when it is a non-empty string", () => {
+    const link = { reportId: 'r', destinationId: 'd', spreadsheetId: 's', sheetId: 0, syncedDraftHash: 'h' };
+    const parse = (spreadsheetTitle: unknown) =>
+      parseStoredReport({ schemaVersion: 1, title: 'T', draft: { mainDataMartId: DM.visitor }, linkedReport: { ...link, spreadsheetTitle } })?.linkedReport;
+    expect(parse('Visitors')).toEqual({ ...link, spreadsheetTitle: 'Visitors' });
+    for (const value of ['', 42, undefined]) expect(parse(value)).toEqual(link);
+  });
 });
 
 describe('configHash', () => {

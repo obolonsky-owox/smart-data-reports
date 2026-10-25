@@ -154,7 +154,7 @@ it('routes a capped result to a Google Sheets report and then shows its SQL when
   await userEvent.click(screen.getByRole('button', { name: 'Done' }));
   await userEvent.click(screen.getByRole('tab', { name: 'SQL' }));
   expect(await screen.findByTestId('sqlCode')).toHaveTextContent('SELECT email');
-  expect(screen.getByRole('button', { name: 'Update Google Sheets' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'More Google Sheets actions' })).toBeInTheDocument();
 });
 
 it('links a new Google Sheets report before its first run, so a failed run offers Update', async () => {
@@ -620,8 +620,13 @@ describe('saving a report linked to Google Sheets', () => {
   const savedDoc = () => [...reports().values()][0]!;
   const puts = () => __mock.state.requests.filter((r) => r.method === 'PUT');
 
+  const openSheetsMenu = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'More Google Sheets actions' }));
+    return screen.findByRole('menuitem', { name: 'Update Google Sheets' });
+  };
+
   const updateSheets = async () => {
-    await userEvent.click(screen.getByRole('button', { name: 'Update Google Sheets' }));
+    await userEvent.click(await openSheetsMenu());
     const guard = screen.queryByRole('alertdialog');
     if (guard) await userEvent.click(within(guard).getByRole('button', { name: 'Overwrite' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Update report' }));
@@ -633,7 +638,20 @@ describe('saving a report linked to Google Sheets', () => {
     await waitFor(() => expect((savedDoc().document as StoredReport).draft.columns.map((c) => c.name)).toContain('client_id'));
     expect(puts()).toEqual([]);
     expect((savedDoc().document as StoredReport).linkedReport).toEqual(stored.linkedReport);
-    expect(screen.getByRole('button', { name: 'Update Google Sheets' })).toBeEnabled();
+    expect(await openSheetsMenu()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('opens the linked spreadsheet by its name and offers the update in the menu', async () => {
+    await openLinked({ linkedReport: link(linkedDraft, { dataMartId: DM.visitor, spreadsheetTitle: 'Visitors for Q4' }) });
+    await userEvent.click(screen.getByRole('button', { name: 'Visitors for Q4' }));
+    expect(__mock.state.opened).toEqual(['https://docs.google.com/spreadsheets/d/sheet-1/edit#gid=0']);
+    expect(puts()).toEqual([]);
+    expect(await openSheetsMenu()).toBeInTheDocument();
+  });
+
+  it('names a spreadsheet linked before names were recorded generically', async () => {
+    await openLinked();
+    expect(screen.getByRole('button', { name: 'Open spreadsheet' })).toBeInTheDocument();
   });
 
   it('keeps the edits when ODM rejects the update', async () => {

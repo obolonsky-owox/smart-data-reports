@@ -9,12 +9,13 @@ import {
 } from '@owox/ui/components/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@owox/ui/components/dropdown-menu';
 import { Skeleton } from '@owox/ui/components/skeleton';
+import { GoogleSheetsIcon } from '../../components/GoogleSheetsIcon';
 import { useServices } from '../../services';
 import { describeError, type UserFacingError } from '../../lib/errors';
 import { formatRelativeTime } from '../../lib/format';
 import type { SavedReport } from '../../lib/report-store';
 import { authorLabel } from '../../lib/authors';
-import { odmReportsPath } from '../../lib/sheets-sync';
+import { odmReportsPath, spreadsheetLabel, spreadsheetUrl } from '../../lib/sheets-sync';
 
 type State =
   | { status: 'loading' }
@@ -22,7 +23,7 @@ type State =
   | { status: 'ready'; reports: SavedReport[]; martTitles: Map<string, string>; people: Map<string, string> };
 
 export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void; onCreate(): void }) {
-  const { store, snapshots, api, userId } = useServices();
+  const { store, snapshots, api, userId, openExternal } = useServices();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [deleting, setDeleting] = useState<SavedReport | null>(null);
 
@@ -96,6 +97,7 @@ export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void
                 <tr>
                   <th className='px-3 py-2 font-medium'>Title</th>
                   <th className='px-3 py-2 font-medium'>Data mart</th>
+                  <th className='px-3 py-2 font-medium'>Google Sheets</th>
                   <th className='px-3 py-2 font-medium'>Author</th>
                   <th className='px-3 py-2 font-medium'>Updated</th>
                   <th className='w-10 px-1 py-2'>
@@ -110,6 +112,7 @@ export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void
                     <td className='px-3 py-2 text-muted-foreground'>
                       {state.martTitles.get(r.report.draft.mainDataMartId) ?? 'Unavailable data mart'}
                     </td>
+                    <GoogleSheetsCell report={r} onOpen={openExternal} />
                     <td className='px-3 py-2 text-muted-foreground'>{authorLabel(r.report, userId, state.people)}</td>
                     <td className='px-3 py-2 text-muted-foreground' title={r.updatedAt}>{formatRelativeTime(r.updatedAt)}</td>
                     {/* The menu is not part of the row's click: opening it must not open the report. */}
@@ -154,6 +157,26 @@ export function ReportsListPage({ onOpen, onCreate }: { onOpen(id: string): void
         />
       )}
     </div>
+  );
+}
+
+/** The linked spreadsheet as a one-line link; opening it must not open the report too. */
+function GoogleSheetsCell({ report, onOpen }: { report: SavedReport; onOpen(url: string): void }) {
+  const linked = report.report.linkedReport;
+  if (!linked) return <td className='px-3 py-2 text-muted-foreground'>—</td>;
+  const label = spreadsheetLabel(linked);
+  return (
+    <td className='px-3 py-2' onClick={(e) => e.stopPropagation()}>
+      <button
+        type='button'
+        className='flex max-w-56 cursor-pointer items-center gap-1.5 rounded-sm text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+        title={`Open “${label}” in Google Sheets`}
+        onClick={() => onOpen(spreadsheetUrl(linked))}
+      >
+        <GoogleSheetsIcon className='size-4 shrink-0' />
+        <span className='truncate'>{label}</span>
+      </button>
+    </td>
   );
 }
 

@@ -14,6 +14,8 @@ export interface LinkedReport {
   syncedDraftHash: string;
   /** The data mart the ODM report reads; absent on links created before it was recorded. */
   dataMartId?: string;
+  /** The spreadsheet's file name as created; absent on links created before it was recorded. */
+  spreadsheetTitle?: string;
 }
 
 export interface StoredReport {
@@ -100,8 +102,12 @@ function isLinkedReport(value: unknown): value is LinkedReport {
 
 function parseLinkedReport(value: unknown): LinkedReport | undefined {
   if (!isLinkedReport(value)) return undefined;
-  const { reportId, destinationId, spreadsheetId, sheetId, syncedDraftHash, dataMartId } = value;
-  return { reportId, destinationId, spreadsheetId, sheetId, syncedDraftHash, ...(typeof dataMartId === 'string' ? { dataMartId } : {}) };
+  const { reportId, destinationId, spreadsheetId, sheetId, syncedDraftHash, dataMartId, spreadsheetTitle } = value;
+  return {
+    reportId, destinationId, spreadsheetId, sheetId, syncedDraftHash,
+    ...(typeof dataMartId === 'string' ? { dataMartId } : {}),
+    ...(typeof spreadsheetTitle === 'string' && spreadsheetTitle ? { spreadsheetTitle } : {}),
+  };
 }
 
 export function parseStoredReport(value: unknown): StoredReport | null {

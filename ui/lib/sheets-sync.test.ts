@@ -2,7 +2,7 @@ import { DM } from '../fixtures/smart-data';
 import { emptyDraft, type ReportDraft } from './report-draft';
 import { configHash } from './report-store';
 import {
-  createLinkedReport, odmReportsPath, spreadsheetUrl, updateLinkedReport, type SheetsApi,
+  createLinkedReport, odmReportsPath, spreadsheetLabel, spreadsheetUrl, updateLinkedReport, type SheetsApi,
 } from './sheets-sync';
 
 const draft: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }] };
@@ -23,12 +23,23 @@ it('creates a spreadsheet, a report with the read plan, and runs it', async () =
   const { api, calls } = fakeApi();
   const outcome = await createLinkedReport(api, { title: 'Visitors', destinationId: 'dest-1', draft });
   expect(outcome).toEqual({
-    linked: { reportId: 'report-1', destinationId: 'dest-1', spreadsheetId: 'sheet-1', sheetId: 7, syncedDraftHash: configHash(draft), dataMartId: DM.visitor },
+    linked: { reportId: 'report-1', destinationId: 'dest-1', spreadsheetId: 'sheet-1', sheetId: 7, syncedDraftHash: configHash(draft), dataMartId: DM.visitor,
+      spreadsheetTitle: 'Visitors',
+    },
     runStatus: 'SUCCESS',
     runError: undefined,
   });
   expect(calls.map((c) => c[0])).toEqual(['createSpreadsheet', 'createReport', 'run']);
   expect(calls[1]?.[2]).toMatchObject({ title: 'Visitors', spreadsheetId: 'sheet-1', sheetId: 7, config: { columnConfig: ['email'] } });
+});
+
+it("records the spreadsheet's name as ODM gives it", async () => {
+  const { api } = fakeApi();
+  const name = async (title: string) => (await createLinkedReport(api, { title, destinationId: 'dest-1', draft })).linked.spreadsheetTitle;
+  expect(await name('  Visitors  ')).toBe('Visitors');
+  expect(await name('   ')).toBe('OWOX Report');
+  expect(spreadsheetLabel({ spreadsheetTitle: 'Visitors' })).toBe('Visitors');
+  expect(spreadsheetLabel({})).toBe('Open spreadsheet');
 });
 
 it('hands over the link before running, so a failed run leaves no orphan', async () => {
