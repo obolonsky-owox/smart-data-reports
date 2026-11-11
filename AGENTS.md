@@ -42,6 +42,7 @@ Read first: `docs/superpowers/specs/2026-10-02-smart-data-reports-design.md`, th
 | `ui/lib/authors.ts` | Report author names: stored on save, else borrowed from the data mart list. |
 | `ui/lib/sheets-sync.ts` | Create/update the linked ODM Google Sheets report. |
 | `ui/lib/canvas-model.ts` | Draft → canvas nodes, edges and layout. |
+| `ui/components/data-mart-icon/` | Data mart icons drawn as ODM draws them; ported from `apps/web/.../DataMartIcon`, the full lucide set loads lazily. |
 | `ui/features/*` | React screens; props-driven, tested against `ui/sdk-mock.ts`. |
 | `ui/vendor/owox-ui/` | Vendored ODM UI; refresh with `npm run sync:ui`. |
 | `docs/verification/host-checks.md` | Platform facts verified on a real host. |

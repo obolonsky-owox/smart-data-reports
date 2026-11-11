@@ -85,6 +85,11 @@ export function configHash(draft: ReportDraft): string {
   });
 }
 
+/** configHash without the column order: two drafts with equal result hashes read the same rows. */
+export function resultHash(draft: ReportDraft): string {
+  return configHash({ ...draft, columns: [...draft.columns].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) });
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);

@@ -1,5 +1,5 @@
 import type {
-  BlendableSchema, DataMartSummary, RelationshipGraph, ReportRunStatus, ReportSummary, Row,
+  DataMartAppearance, BlendableSchema, DataMartSummary, RelationshipGraph, ReportRunStatus, ReportSummary, Row,
   SheetsDestination, SpreadsheetRef, Totals,
 } from './odm-types';
 import { nameOf, peopleOf } from './authors';
@@ -80,6 +80,19 @@ function reportableMart(item: unknown): DataMartSummary | null {
   };
 }
 
+/** Icon and definition type of every data mart the list names, reportable or not. */
+function appearanceOf(raw: unknown[]): Map<string, DataMartAppearance> {
+  const appearance = new Map<string, DataMartAppearance>();
+  for (const item of raw) {
+    if (!isRecord(item) || typeof item.id !== 'string') continue;
+    appearance.set(item.id, {
+      icon: typeof item.icon === 'string' && item.icon ? item.icon : null,
+      definitionType: typeof item.definitionType === 'string' && item.definitionType ? item.definitionType : null,
+    });
+  }
+  return appearance;
+}
+
 /** Pages `/api/data-marts` without the client's strict validation of every item. */
 async function listDataMartsLeniently(owox: OwoxClient): Promise<unknown[]> {
   const marts: unknown[] = [];
@@ -116,6 +129,12 @@ export function createOdmApi(owox: OwoxClient) {
 
   return {
     listDataMarts: async (): Promise<DataMartSummary[]> => reportable(await listRawDataMarts()),
+
+    /** The reportable data marts plus how ODM draws every data mart, joined ones included. */
+    async listDataMartCatalog(): Promise<{ marts: DataMartSummary[]; appearance: Map<string, DataMartAppearance> }> {
+      const raw = await listRawDataMarts();
+      return { marts: reportable(raw), appearance: appearanceOf(raw) };
+    },
 
     /** The reportable data marts plus the names of the people the whole list mentions. */
     async listDataMartsWithPeople(): Promise<{ marts: DataMartSummary[]; people: Map<string, string> }> {

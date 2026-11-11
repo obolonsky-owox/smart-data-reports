@@ -99,6 +99,14 @@ export function useQueryRun(
     );
   }, []);
 
+  /**
+   * Takes `draft` as what the shown result was applied with. Only for a draft that reads the
+   * same rows, e.g. after a column reorder, which the table shows without a new query.
+   */
+  const rebase = useCallback((draft: ReportDraft) => {
+    setState((s) => (s.status === 'success' ? { ...s, appliedDraft: draft, appliedHash: configHash(draft) } : s));
+  }, []);
+
   const cancel = useCallback(() => {
     current.current?.abort();
     current.current = null;
@@ -114,5 +122,5 @@ export function useQueryRun(
 
   useEffect(() => () => current.current?.abort(), []);
 
-  return { state, run, cancel, reset, restore };
+  return { state, run, cancel, reset, restore, rebase };
 }

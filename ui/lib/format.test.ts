@@ -1,4 +1,7 @@
-import { formatCell, formatCount, formatRelativeTime } from './format';
+import { formatCell, formatCount, formatRelativeTime, formatTimestamp } from './format';
+
+// Node reads TZ on every conversion, so the viewer's zone is fixed for this file.
+process.env.TZ = 'America/New_York';
 
 it('renders any cell value without crashing', () => {
   expect(formatCell(null)).toBe('—');
@@ -18,4 +21,22 @@ it('formats counts and relative times', () => {
   expect(formatRelativeTime('2026-10-02T11:00:00Z', now)).toBe('1 h ago');
   expect(formatRelativeTime('2026-09-30T12:00:00Z', now)).toBe('2 d ago');
   expect(formatRelativeTime('2026-08-01T12:00:00Z', now)).toBe('2026-08-01');
+});
+
+it('shows zoned timestamps in the viewer\'s time zone', () => {
+  expect(formatCell('2026-11-10T05:50:55.000Z')).toBe('2026-11-10 00:50:55');
+  expect(formatCell('2026-11-10T02:05:12.000Z')).toBe('2026-11-09 21:05:12');
+  expect(formatTimestamp('2026-07-01T12:00:00.250+02:00')).toBe('2026-07-01 06:00:00.250');
+  expect(formatTimestamp('2026-11-10 05:50:55 UTC')).toBeNull();
+});
+
+it('keeps values without a zone, and text that only looks like a date', () => {
+  expect(formatCell('2026-11-10')).toBe('2026-11-10');
+  expect(formatCell('2026-11-10T05:50:55')).toBe('2026-11-10T05:50:55');
+  expect(formatCell('Released 2026-11-10T05:50:55Z')).toBe('Released 2026-11-10T05:50:55Z');
+});
+
+it('shows a date bucket as its date, never shifted into the viewer\'s zone', () => {
+  expect(formatCell('2026-11-10T00:00:00.000Z', { dateBucket: true })).toBe('2026-11-10');
+  expect(formatCell('2026-11-10', { dateBucket: true })).toBe('2026-11-10');
 });

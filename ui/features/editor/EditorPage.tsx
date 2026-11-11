@@ -18,14 +18,14 @@ import { DataMartPicker } from '../../components/DataMartPicker';
 import { GoogleSheetsIcon } from '../../components/GoogleSheetsIcon';
 import { NativeSelect } from '../../components/NativeSelect';
 import { describeError, type UserFacingError } from '../../lib/errors';
-import type { DataMartSummary } from '../../lib/odm-types';
+import type { DataMartAppearance, DataMartSummary } from '../../lib/odm-types';
 import { describeIssue, validateDraft } from '../../lib/read-plan';
 import {
-  addColumn, changeInstancePath, chooseAutoDate, emptyDraft, includePath, moveColumn, rebaseOnMain,
+  addColumn, changeInstancePath, chooseAutoDate, emptyDraft, includePath, moveColumn, moveSort, rebaseOnMain,
   removeColumn, removeDateRange, removeFilter, removeInstance, setAggregations, setDateRange, setDateTrunc,
   setSort, upsertFilter, type DateChoice, type RemapResult, type ReportDraft,
 } from '../../lib/report-draft';
-import { configHash } from '../../lib/report-store';
+import { configHash, resultHash } from '../../lib/report-store';
 import { toSnapshot } from '../../lib/run-snapshot';
 import { groupByStorage, type StorageCatalog } from '../../lib/storages';
 import type { AliasPath, SchemaIndex } from '../../lib/schema-index';
@@ -33,6 +33,7 @@ import { ColumnPanel } from '../column-panel/ColumnPanel';
 import { DateChoiceDialog } from '../column-panel/DateChoiceDialog';
 import { ResultTable } from '../data-table/ResultTable';
 import { RelationshipCanvas } from '../canvas/RelationshipCanvas';
+import { DEFAULT_CANVAS_SETTINGS, type CanvasSettings } from '../canvas/CanvasSettingsPopover';
 import { SheetsReportDialog } from '../sheets/SheetsReportDialog';
 import { spreadsheetLabel, spreadsheetUrl } from '../../lib/sheets-sync';
 import { SqlTab, type LastRunSql } from '../sql/SqlTab';
@@ -78,6 +79,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
     copyLink().catch(() => toast.error("Couldn't copy the link. Try again."));
   }
   const [marts, setMarts] = useState<DataMartSummary[] | null>(null);
+  const [appearance, setAppearance] = useState<ReadonlyMap<string, DataMartAppearance>>(() => new Map());
+  /** The canvas gear's settings; kept here so they survive switching tabs. */
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>(DEFAULT_CANVAS_SETTINGS);
   const [martsError, setMartsError] = useState<UserFacingError | null>(null);
   const [startStorageId, setStartStorageId] = useState('');
   const [startId, setStartId] = useState('');
@@ -113,8 +117,12 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
 
   useEffect(() => {
     let alive = true;
-    api.listDataMarts().then(
-      (list) => alive && setMarts(list),
+    api.listDataMartCatalog().then(
+      (catalog) => {
+        if (!alive) return;
+        setMarts(catalog.marts);
+        setAppearance(catalog.appearance);
+      },
       (error) => alive && setMartsError(describeError(error, 'data marts')),
     );
     return () => {
@@ -184,6 +192,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   const hash = draft ? configHash(draft) : '';
   const applied = query.state.status === 'success' || query.state.status === 'error' ? query.state.appliedHash : null;
   const stale = query.state.status === 'success' && applied !== hash;
+  // A new column order reads the same rows: the table shows it at once, and saving needs no new run.
+  const reordered = stale && query.state.status === 'success' && !!draft && resultHash(query.state.appliedDraft) === resultHash(draft);
   const linked = doc.saved?.linkedReport;
 
   // The member's last result of the saved configuration, kept for the next time they open the report.
@@ -192,7 +202,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   useEffect(() => {
     const s = query.state;
     if (s.status !== 'success' || s.restored || !s.settled || !savedId || s.appliedHash !== savedHash) return;
-    const key = `${savedId}@${s.ranAt}`;
+    // A reordered result is saved again under its new order.
+    const key = `${savedId}@${s.ranAt}@${s.appliedHash}`;
     if (written.current === key) return;
     written.current = key;
     const snapshot = toSnapshot({
@@ -271,7 +282,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
   async function applyAndSave(asCopy = false) {
     if (!draft || issues.length) return;
     if ((doc.dirty || asCopy) && !(await save(asCopy))) return;
-    if (!shownCurrent) apply();
+    if (reordered) query.rebase(draft);
+    else if (!shownCurrent) apply();
   }
 
   // Saving and both Google Sheets flows write the document, so another member's report asks first.
@@ -592,6 +604,8 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
       onRemoveFilter={(id) => edit((d) => removeFilter(d, id))}
       onMoveColumn={(from, to) => edit((d) => moveColumn(d, from, to))}
       onRemoveColumn={(name) => edit((d) => removeColumn(d, name))}
+      onSort={(column, direction) => edit((d) => setSort(d, column, direction))}
+      onMoveSort={(from, to) => edit((d) => moveSort(d, from, to))}
       onPendingFilterDone={() => setFilterRequest(null)}
       onChangeMain={(id, origin) => void changeMain(id, origin)}
       onApply={onApply}
@@ -622,7 +636,7 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
               <div className='flex items-center gap-4 border-b border-border'>
                 <TabsList className={UNDERLINE_LIST}>
                   <TabsTrigger value='table' className={UNDERLINE_TRIGGER}>Data table</TabsTrigger>
-                  <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Data Marts Relationships</TabsTrigger>
+                  <TabsTrigger value='canvas' className={UNDERLINE_TRIGGER}>Relationships Canvas</TabsTrigger>
                   <TabsTrigger value='sql' className={UNDERLINE_TRIGGER}>SQL</TabsTrigger>
                   <TabsTrigger value='description' className={UNDERLINE_TRIGGER}>Description</TabsTrigger>
                 </TabsList>
@@ -654,7 +668,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   draft={draft}
                   run={query.state}
                   stale={stale}
+                  reordered={reordered}
                   linked={!!linked}
+                  onMoveColumn={(from, to) => edit((d) => moveColumn(d, from, to))}
                   onSort={(column, direction) => edit((d) => setSort(d, column, direction))}
                   onSetAggregations={(column, fns) => edit((d) => setAggregations(d, column, fns))}
                   onSetDateTrunc={(column, unit) => edit((d) => setDateTrunc(d, column, unit))}
@@ -672,6 +688,9 @@ function Editor({ reportId, onBack, onReload }: EditorPageProps & { onReload(): 
                   graph={graph}
                   draft={draft}
                   theme={theme}
+                  appearance={appearance}
+                  settings={canvasSettings}
+                  onSettingsChange={setCanvasSettings}
                   onAddObject={addObject}
                   onSetMain={(id) => void changeMain(id)}
                   onDeleteInstance={(path) => edit((d) => removeInstance(d, path))}

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { DM } from '../../fixtures/smart-data';
 import type { OdmApi, QueryResult } from '../../lib/odm-api';
 import { emptyDraft, type ReportDraft } from '../../lib/report-draft';
+import { configHash } from '../../lib/report-store';
 import { useQueryRun } from './use-query-run';
 
 const draft = (column: string): ReportDraft => ({ ...emptyDraft(DM.visitor), columns: [{ name: column, aliasPath: '' }] });
@@ -74,4 +75,18 @@ it("names the data mart when the query isn't allowed", async () => {
   const { result } = renderHook(() => useQueryRun(api));
   await act(async () => result.current.run(DM.visitor, draft('email'), 'Visitor'));
   expect(result.current.state).toMatchObject({ status: 'error', error: { message: "You don't have access to Visitor." } });
+});
+
+it('takes a reordered draft as the applied one without a new query', async () => {
+  const api = {
+    runQuery: vi.fn(async () => ({ rows: [{ email: 'a', client_id: 'b' }], truncated: false })),
+    getRunDetails: vi.fn(),
+  } as unknown as OdmApi;
+  const { result } = renderHook(() => useQueryRun(api, { totalsRetryMs: 0 }));
+  const both: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }, { name: 'client_id', aliasPath: '' }] };
+  await act(async () => result.current.run(DM.visitor, both));
+  const reordered = { ...both, columns: [both.columns[1]!, both.columns[0]!] };
+  act(() => result.current.rebase(reordered));
+  expect(result.current.state).toMatchObject({ status: 'success', appliedDraft: reordered, appliedHash: configHash(reordered) });
+  expect(api.runQuery).toHaveBeenCalledTimes(1);
 });

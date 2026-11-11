@@ -141,6 +141,20 @@ it('keeps the storage the data mart list names, without the rest of the item', a
   expect(mart).toEqual({ ...DATA_MARTS[0], storage: { type: 'GOOGLE_BIGQUERY', title: 'Warehouse' } });
 });
 
+it('reads the icon and definition type of every data mart, reportable or not', async () => {
+  const items = [
+    { ...DATA_MARTS[0]!, icon: 'sessions', definitionType: 'SQL' },
+    { ...DATA_MARTS[1]!, status: 'DRAFT' as const, icon: 'lucide:anchor', definitionType: null },
+    { ...DATA_MARTS[2]! },
+  ];
+  const { owox } = fakeOwox({ dataMarts: { list: async () => items, traverseData: async () => traversal([]) } });
+  const { marts, appearance } = await createOdmApi(owox).listDataMartCatalog();
+  expect(marts.map((m) => m.id)).not.toContain(DATA_MARTS[1]!.id);
+  expect(appearance.get(DATA_MARTS[0]!.id)).toEqual({ icon: 'sessions', definitionType: 'SQL' });
+  expect(appearance.get(DATA_MARTS[1]!.id)).toEqual({ icon: 'lucide:anchor', definitionType: null });
+  expect(appearance.get(DATA_MARTS[2]!.id)).toEqual({ icon: null, definitionType: null });
+});
+
 it('creates and updates Google Sheets reports with the read plan', async () => {
   const { owox, calls } = fakeOwox();
   const api = createOdmApi(owox);

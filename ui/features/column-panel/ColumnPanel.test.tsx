@@ -14,7 +14,7 @@ function setup(overrides: Partial<Parameters<typeof ColumnPanel>[0]> = {}) {
     index, graph: VISITOR_GRAPH, draft: emptyDraft(DM.visitor), marts: DATA_MARTS, filterRequest: null,
     onToggleField: vi.fn(), onChangeInstancePath: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(),
     onSetDateRange: vi.fn(), onRemoveDateRange: vi.fn(), onUpsertFilter: vi.fn(), onRemoveFilter: vi.fn(),
-    onMoveColumn: vi.fn(), onRemoveColumn: vi.fn(), onPendingFilterDone: vi.fn(),
+    onMoveColumn: vi.fn(), onRemoveColumn: vi.fn(), onSort: vi.fn(), onMoveSort: vi.fn(), onPendingFilterDone: vi.fn(),
     storages: null, storageId: undefined, onChangeStorage: vi.fn(),
     onChangeMain: vi.fn(), onApply: vi.fn(), applyDisabled: false, applying: false, issues: [],
     ...overrides,

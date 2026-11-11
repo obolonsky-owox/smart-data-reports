@@ -284,8 +284,14 @@ describe('storages', () => {
 
   it('falls back to every reportable data mart when the data mart list names no storage', async () => {
     const services = await mockServices();
-    const list = services.api.listDataMarts;
-    services.api = { ...services.api, listDataMarts: async () => (await list()).map((m) => ({ ...m, storage: { type: m.storage.type, title: '' } })) };
+    const list = services.api.listDataMartCatalog;
+    services.api = {
+      ...services.api,
+      listDataMartCatalog: async () => {
+        const { marts, appearance } = await list();
+        return { marts: marts.map((m) => ({ ...m, storage: { type: m.storage.type, title: '' } })), appearance };
+      },
+    };
     renderWithServices(<EditorPage onBack={vi.fn()} />, services);
     await userEvent.click(await screen.findByRole('combobox', { name: 'Data mart' }));
     expect(screen.queryByRole('combobox', { name: 'Storage' })).not.toBeInTheDocument();
@@ -302,7 +308,7 @@ describe('storages', () => {
 
   it('says when no data mart is available for reports', async () => {
     const services = await mockServices();
-    services.api = { ...services.api, listDataMarts: async () => [] };
+    services.api = { ...services.api, listDataMartCatalog: async () => ({ marts: [], appearance: new Map() }) };
     renderWithServices(<EditorPage onBack={vi.fn()} />, services);
     expect(await screen.findByText('No published data marts available for reports')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
@@ -388,7 +394,7 @@ describe('the description', () => {
   it('comes last, after SQL', async () => {
     await openDescription({ ...theirs, createdBy: 'demo-user' });
     const [editorTabs] = screen.getAllByRole('tablist');
-    expect(within(editorTabs!).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Data table', 'Data Marts Relationships', 'SQL', 'Description']);
+    expect(within(editorTabs!).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Data table', 'Relationships Canvas', 'SQL', 'Description']);
   });
 
   it('saves with the report without running the query', async () => {

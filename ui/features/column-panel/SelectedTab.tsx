@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, GripVertical, Plus, X } from 'lucide-react';
 import { Badge } from '@owox/ui/components/badge';
 import { Button } from '@owox/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@owox/ui/components/popover';
@@ -35,6 +35,9 @@ export interface SelectedTabProps {
   onSetDateTrunc(column: string, unit: DateTruncUnit | undefined): void;
   onMoveColumn(from: number, to: number): void;
   onRemoveColumn(name: string): void;
+  /** Sorts a column, changes its direction, or with null drops the sort, as the table's column menu does. */
+  onSort(column: string, direction: 'asc' | 'desc' | null): void;
+  onMoveSort(from: number, to: number): void;
 }
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
@@ -68,12 +71,12 @@ function describeAggregation(column: DraftColumn): string {
   return (column.aggregations ?? []).map((fn) => FN_LABEL[fn]).join(', ');
 }
 
-function SortableRow({ id, children }: { id: string; children: ReactNode }) {
+function SortableRow({ id, label = 'Drag to reorder', children }: { id: string; label?: string; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
   return (
     // dnd-kit positions the dragged row through a transform; that is the one inline style here.
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className='flex min-w-0 items-center gap-2 px-3 py-1'>
-      <button type='button' aria-label='Drag to reorder' className='shrink-0 cursor-grab text-muted-foreground' {...attributes} {...listeners}>
+      <button type='button' aria-label={label} className='shrink-0 cursor-grab text-muted-foreground' {...attributes} {...listeners}>
         <GripVertical className='h-4 w-4' />
       </button>
       {children}
@@ -85,8 +88,8 @@ export function SelectedTab(props: SelectedTabProps) {
   const { index, graph, draft, pendingFilterField, onPendingFilterDone } = props;
   const [editingFilter, setEditingFilter] = useState<string | null>(null);
   const [newFilterField, setNewFilterField] = useState<string | null>(null);
-  const [menu, setMenu] = useState<'date' | 'filter' | null>(null);
-  const menuProps = (name: 'date' | 'filter') => ({ open: menu === name, onOpenChange: (open: boolean) => setMenu(open ? name : null) });
+  const [menu, setMenu] = useState<'date' | 'filter' | 'sort' | null>(null);
+  const menuProps = (name: 'date' | 'filter' | 'sort') => ({ open: menu === name, onOpenChange: (open: boolean) => setMenu(open ? name : null) });
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const main = index.instances.get('')!;
   const used = usedInstances(draft).map((p) => index.instances.get(p)).filter((i) => i !== undefined);
@@ -109,6 +112,15 @@ export function SelectedTab(props: SelectedTabProps) {
   function onDragEnd(event: DragEndEvent) {
     if (!event.over || event.active.id === event.over.id) return;
     props.onMoveColumn(names.indexOf(String(event.active.id)), names.indexOf(String(event.over.id)));
+  }
+
+  // Rows sort by report columns only; the same choice as the table's column menu.
+  const sorted = new Set(draft.sorts.map((s) => s.column));
+  const sortable = draft.columns.filter((c) => !sorted.has(c.name) && index.fields.has(c.name));
+  const sortIds = draft.sorts.map((s) => `sort:${s.column}`);
+  function onSortDragEnd(event: DragEndEvent) {
+    if (!event.over || event.active.id === event.over.id) return;
+    props.onMoveSort(sortIds.indexOf(String(event.active.id)), sortIds.indexOf(String(event.over.id)));
   }
 
   return (
@@ -288,6 +300,74 @@ export function SelectedTab(props: SelectedTabProps) {
             </div>
           );
         })}
+      </Section>
+
+      <Section
+        title='Sorting'
+        action={
+          sortable.length > 0 && (
+            <Popover {...menuProps('sort')}>
+              <PopoverTrigger asChild>
+                <Button variant='ghost' size='sm' className='h-7 text-xs'>
+                  <Plus className='h-4 w-4' />
+                  Sort
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='max-h-72 w-64 overflow-y-auto p-1'>
+                {sortable.map((c) => (
+                  <button
+                    key={c.name}
+                    type='button'
+                    className='flex w-full justify-between gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent'
+                    onClick={() => {
+                      props.onSort(c.name, 'asc');
+                      setMenu(null);
+                    }}
+                  >
+                    <span className='min-w-0 truncate'>{fieldLabel(c.name)}</span>
+                    <span className='shrink-0 text-xs text-muted-foreground'>{martLabel(c.aliasPath)}</span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )
+        }
+      >
+        {draft.sorts.length === 0 && <p className='px-3 text-xs text-muted-foreground'>Unsorted. Add a sort here or from a column's menu in the table.</p>}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSortDragEnd}>
+          <SortableContext items={sortIds} strategy={verticalListSortingStrategy}>
+            <ul className='flex flex-col'>
+              {draft.sorts.map((sort, i) => {
+                const field = index.fields.get(sort.column);
+                const label = fieldLabel(sort.column);
+                const ascending = sort.direction === 'asc';
+                return (
+                  <SortableRow key={sort.column} id={`sort:${sort.column}`} label={`Drag to reorder sort ${label}`}>
+                    {draft.sorts.length > 1 && <span className='w-4 shrink-0 text-xs text-muted-foreground tabular-nums'>{i + 1}.</span>}
+                    <span className='min-w-0 flex-1 truncate text-sm' title={label}>
+                      {label}
+                    </span>
+                    {field && martOf(field.aliasPath, 'max-w-[30%] shrink-0')}
+                    <Button
+                      variant='ghost'
+                      size='sm'
+                      className='h-7 shrink-0 gap-1 px-2 text-xs text-primary'
+                      aria-label={`Sort ${label} ${ascending ? 'Z → A' : 'A → Z'}`}
+                      title='Change the direction'
+                      onClick={() => props.onSort(sort.column, ascending ? 'desc' : 'asc')}
+                    >
+                      {ascending ? <ArrowUp className='h-3.5 w-3.5' /> : <ArrowDown className='h-3.5 w-3.5' />}
+                      {ascending ? 'A → Z' : 'Z → A'}
+                    </Button>
+                    <Button variant='ghost' size='icon' className='size-7 shrink-0' aria-label={`Remove sort ${label}`} onClick={() => props.onSort(sort.column, null)}>
+                      <X className='h-4 w-4' />
+                    </Button>
+                  </SortableRow>
+                );
+              })}
+            </ul>
+          </SortableContext>
+        </DndContext>
       </Section>
 
       <Section title='Columns'>

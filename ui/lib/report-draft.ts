@@ -167,6 +167,15 @@ export function setSort(draft: ReportDraft, column: string, direction: 'asc' | '
   return { ...draft, sorts: [...draft.sorts, { column, direction }] };
 }
 
+/** Moves a sort to another priority; the first sort orders the rows first. */
+export function moveSort(draft: ReportDraft, from: number, to: number): ReportDraft {
+  const sorts = [...draft.sorts];
+  const [moved] = sorts.splice(from, 1);
+  if (!moved) return draft;
+  sorts.splice(Math.max(0, Math.min(to, sorts.length)), 0, moved);
+  return { ...draft, sorts };
+}
+
 export function setAggregations(draft: ReportDraft, column: string, fns: AggregateFunction[] | undefined): ReportDraft {
   return {
     ...draft,

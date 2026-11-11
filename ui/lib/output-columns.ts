@@ -27,6 +27,19 @@ export function outputColumns(rows: Row[], draft: ReportDraft): OutputColumn[] {
   });
 }
 
+/**
+ * Output columns in the order the report has its columns now; the output columns of one report
+ * column (e.g. `visits | SUM`, `visits | AVG`) stay together, and ones the report dropped go last.
+ */
+export function orderLikeDraft(columns: OutputColumn[], draft: ReportDraft): OutputColumn[] {
+  const position = new Map(draft.columns.map((c, i) => [c.name, i]));
+  const at = (out: OutputColumn) => position.get(out.column?.name ?? splitOutputKey(out.key).base) ?? Number.MAX_SAFE_INTEGER;
+  return columns
+    .map((out, i) => ({ out, i }))
+    .sort((a, b) => at(a.out) - at(b.out) || a.i - b.i)
+    .map(({ out }) => out);
+}
+
 export interface TotalCell {
   fn: string;
   value: Totals[string];
