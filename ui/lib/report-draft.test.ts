@@ -4,6 +4,7 @@ import {
   activeVariant, addColumn, changeInstancePath, chooseAutoDate, emptyDraft, hasSelections, includePath, moveColumn, rebaseOnMain,
   removeDateRange, removeInstance, setDateRange, setSort, upsertFilter, usedInstances,
   type ReportDraft,
+  moveSort,
 } from './report-draft';
 
 const visitor = buildSchemaIndex({ id: DM.visitor, title: 'Visitor' }, VISITOR_SCHEMA);
@@ -188,4 +189,10 @@ describe('usedInstances', () => {
     const draft = add(emptyDraft(DM.visitor), 'email', 'contact_user__creation_source');
     expect(usedInstances(draft).sort()).toEqual(['', 'contact', 'contact.user']);
   });
+});
+
+it('moves a sort to another priority', () => {
+  const draft = { ...emptyDraft(DM.visitor), sorts: [{ column: 'a', direction: 'asc' as const }, { column: 'b', direction: 'desc' as const }] };
+  expect(moveSort(draft, 0, 1).sorts.map((s) => s.column)).toEqual(['b', 'a']);
+  expect(moveSort(draft, 5, 0)).toBe(draft);
 });

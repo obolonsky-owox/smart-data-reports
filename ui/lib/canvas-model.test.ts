@@ -50,3 +50,28 @@ it('lays labelled edges out with room between the nodes and keeps the left-to-ri
   // The two-line label of session -> pageviews (about 140px wide) fits between the cards.
   expect(x('sessions.pageviews') - x('sessions') - NODE_WIDTH).toBeGreaterThan(140);
 });
+
+it('lays the graph out top to bottom when vertical', () => {
+  const draft = includePath(emptyDraft(DM.visitor), 'sessions.pageviews');
+  const nodes = buildCanvasModel(index, VISITOR_GRAPH, draft, { direction: 'vertical' }).nodes;
+  const at = (path: string) => nodes.find((n) => n.path === path)!;
+  expect(at('sessions').y).toBeGreaterThan(at('').y);
+  expect(at('sessions.pageviews').y).toBeGreaterThan(at('sessions').y);
+});
+
+it('packs the cards closer when the join keys only show on hover', () => {
+  const draft = includePath(emptyDraft(DM.visitor), 'sessions.pageviews');
+  const gap = (joinLabels: boolean) => {
+    const nodes = buildCanvasModel(index, VISITOR_GRAPH, draft, { joinLabels }).nodes;
+    const x = (path: string) => nodes.find((n) => n.path === path)!.x;
+    return x('sessions.pageviews') - x('sessions');
+  };
+  expect(gap(false)).toBeLessThan(gap(true));
+});
+
+it('counts the fields of each instance and the ones the report uses', () => {
+  const draft = add(emptyDraft(DM.visitor), 'email', 'visits');
+  const main = buildCanvasModel(index, VISITOR_GRAPH, draft).nodes.find((n) => n.path === '')!;
+  expect(main.fieldCount).toBe(index.instances.get('')!.fields.length);
+  expect(main.usedFieldCount).toBe(2);
+});

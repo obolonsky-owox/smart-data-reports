@@ -1,4 +1,6 @@
-import { ArrowDown, ArrowUp, EllipsisVertical, X } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { ArrowDown, ArrowUp, EllipsisVertical, GripVertical, X } from 'lucide-react';
 import { Button } from '@owox/ui/components/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup,
@@ -28,6 +30,9 @@ export interface ColumnHeaderProps {
 
 export function ColumnHeader({ out, index, graph, draft, onSort, onSetAggregations, onSetDateTrunc, onEditFilter, onRemoveFilter }: ColumnHeaderProps) {
   const name = out.column?.name;
+  // A column the report no longer has stays where it is until the next run.
+  const movable = !!name && draft.columns.some((c) => c.name === name);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: out.key, disabled: !movable });
   const field = name ? index.fields.get(name) : undefined;
   const sortAt = draft.sorts.findIndex((s) => s.column === name);
   const sort = draft.sorts[sortAt];
@@ -37,8 +42,27 @@ export function ColumnHeader({ out, index, graph, draft, onSort, onSetAggregatio
   const aggregations = field ? aggregationsFor(field) : [];
 
   return (
-    <th scope='col' className='min-w-[140px] px-3 py-2 text-left align-top font-normal'>
+    <th
+      ref={setNodeRef}
+      scope='col'
+      // dnd-kit moves the dragged header through a transform; that is the one inline style here.
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn('group/header relative min-w-[140px] px-3 py-2 text-left align-top font-normal', isDragging && 'z-10 bg-muted shadow-md')}
+      data-dragging={isDragging || undefined}
+    >
       <div className='flex items-start gap-1'>
+        {movable && (
+          <button
+            ref={setActivatorNodeRef}
+            type='button'
+            aria-label={`Drag to reorder ${label}`}
+            className='-ml-2 mt-0.5 shrink-0 cursor-grab rounded text-muted-foreground opacity-0 transition-opacity group-hover/header:opacity-100 focus-visible:opacity-100 active:cursor-grabbing'
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className='h-4 w-4' />
+          </button>
+        )}
         <span className={cn('flex items-center gap-1 font-medium', sort && 'text-primary')}>
           {sort && (sort.direction === 'asc' ? <ArrowUp className='h-4 w-4' /> : <ArrowDown className='h-4 w-4' />)}
           {sort && draft.sorts.length > 1 && <sup>{sortAt + 1}</sup>}

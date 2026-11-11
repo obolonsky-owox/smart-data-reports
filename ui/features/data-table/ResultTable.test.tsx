@@ -20,7 +20,7 @@ function success(rows: Record<string, unknown>[], extra: Partial<Extract<RunStat
 function setup(run: RunState, d: ReportDraft = draft, linked = false, stale = false) {
   const handlers = {
     onSort: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(), onEditFilter: vi.fn(),
-    onRemoveFilter: vi.fn(), onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(), onRefresh: vi.fn(),
+    onRemoveFilter: vi.fn(), onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(), onRefresh: vi.fn(), onMoveColumn: vi.fn(),
   };
   renderUi(<ResultTable index={index} graph={VISITOR_GRAPH} draft={d} run={run} stale={stale} linked={linked} {...handlers} />);
   return handlers;
@@ -150,4 +150,56 @@ it('offers no refresh of a result the report no longer matches', () => {
 it('says when a kept last result lost rows to the size limit', () => {
   setup(success(sampleRows(['email', 'visits'], 3), { restored: true, rowCount: 2500 }));
   expect(screen.getByText('Showing the first 3 of 2,500 rows kept from the last run. Refresh to see them all.')).toBeInTheDocument();
+});
+
+it('shows the columns in the report\'s current order without a new run', () => {
+  const reordered: ReportDraft = { ...draft, columns: [draft.columns[1]!, draft.columns[0]!] };
+  setup(success(sampleRows(['email', 'visits'], 2)), reordered, false, true);
+  const headers = screen.getAllByRole('columnheader').map((h) => within(h).getAllByText(/Email|Visits/)[0]!.textContent);
+  expect(headers).toEqual(['Visits', 'Email']);
+});
+
+it('says a reorder only needs saving', () => {
+  const handlers = {
+    onSort: vi.fn(), onSetAggregations: vi.fn(), onSetDateTrunc: vi.fn(), onEditFilter: vi.fn(), onRemoveFilter: vi.fn(),
+    onCreateSheets: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn(), onRefresh: vi.fn(), onMoveColumn: vi.fn(),
+  };
+  renderUi(<ResultTable index={index} graph={VISITOR_GRAPH} draft={draft} run={success(sampleRows(['email'], 1))} stale reordered {...handlers} />);
+  expect(screen.getByText('You reordered the columns. Click Apply & Save to keep the order.')).toBeInTheDocument();
+});
+
+it('offers a drag handle on each report column', () => {
+  setup(success(sampleRows(['email', 'visits'], 2)));
+  expect(screen.getByRole('button', { name: 'Drag to reorder Email' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Drag to reorder Visits' })).toBeInTheDocument();
+});
+
+it('shows timestamps in local time and keeps the returned value in the tooltip', () => {
+  const at = '2026-11-10T05:50:55.000Z';
+  setup(success([{ email: at, visits: 1 }]));
+  const local = new Date(at);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const text = `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())} ${pad(local.getHours())}:${pad(local.getMinutes())}:${pad(local.getSeconds())}`;
+  expect(screen.getByText(text)).toHaveAttribute('title', `${text}\n${at}`);
+});
+
+it('moves a report column by dragging its header', async () => {
+  const three: ReportDraft = { ...draft, columns: [...draft.columns, { name: 'client_id', aliasPath: '' }] };
+  const h = setup(success(sampleRows(['email', 'visits', 'client_id'], 2), { appliedDraft: three }), three);
+  // Lay the headers out side by side, 150px each, for the keyboard sensor.
+  const layout = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const th = this.closest('th');
+    const left = th ? [...th.parentElement!.children].indexOf(th) * 150 : 0;
+    const width = th ? 150 : 0;
+    return { x: left, y: 0, top: 0, left, width, height: 40, right: left + width, bottom: 40, toJSON: () => ({}) } as DOMRect;
+  });
+  try {
+    screen.getByRole('button', { name: 'Drag to reorder Email' }).focus();
+    await userEvent.keyboard(' ');
+    await userEvent.keyboard('{ArrowRight}');
+    await userEvent.keyboard(' ');
+  } finally {
+    layout.mockRestore();
+  }
+  expect(h.onMoveColumn).toHaveBeenCalledWith(0, 1);
 });

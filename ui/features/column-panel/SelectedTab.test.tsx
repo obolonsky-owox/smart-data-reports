@@ -20,6 +20,8 @@ function setup(draft: ReportDraft, pendingFilterField: string | null = null) {
     onSetDateTrunc: vi.fn(),
     onMoveColumn: vi.fn(),
     onRemoveColumn: vi.fn(),
+    onSort: vi.fn(),
+    onMoveSort: vi.fn(),
   };
   renderUi(<SelectedTab index={index} graph={VISITOR_GRAPH} draft={draft} pendingFilterField={pendingFilterField} {...handlers} />);
   return handlers;
@@ -127,10 +129,10 @@ it('marks date ranges and filters as ODM filters or slices', async () => {
   expect(within(filters).queryByText(/only narrows/)).not.toBeInTheDocument();
 });
 
-it('puts Filters & Slices first, with Date ranges before Filters, then Aggregations and Columns', () => {
+it('puts Filters & Slices first, with Date ranges before Filters, then Aggregations, Sorting and Columns', () => {
   setup(add(emptyDraft(DM.visitor), 'email'));
   const titles = screen.getAllByRole('heading').map((h) => h.textContent);
-  expect(titles).toEqual(['Filters & Slices', 'Date ranges', 'Filters', 'Aggregations', 'Columns']);
+  expect(titles).toEqual(['Filters & Slices', 'Date ranges', 'Filters', 'Aggregations', 'Sorting', 'Columns']);
   const outer = screen.getByRole('region', { name: 'Filters & Slices' });
   expect(within(outer).getByRole('region', { name: 'Date ranges' })).toBeInTheDocument();
   expect(within(outer).getByRole('region', { name: 'Filters' })).toBeInTheDocument();
@@ -180,4 +182,52 @@ it('previews the join path when hovering the data mart of a joined column', asyn
   expect(within(list).getByText('client_id = client_id')).toBeInTheDocument();
   // The main data mart's own fields have no join path to show.
   expect(within(columns).getByText('Visitor').closest('[tabindex]')).toBeNull();
+});
+
+it('lists the sorts the table set, changes their direction and drops them', async () => {
+  const draft = { ...add(emptyDraft(DM.visitor), 'email', 'visits'), sorts: [{ column: 'visits', direction: 'desc' as const }] };
+  const h = setup(draft);
+  const sorting = screen.getByRole('region', { name: 'Sorting' });
+  expect(within(sorting).getByText('Visits')).toBeInTheDocument();
+  await userEvent.click(within(sorting).getByRole('button', { name: 'Sort Visits A → Z' }));
+  expect(h.onSort).toHaveBeenCalledWith('visits', 'asc');
+  await userEvent.click(within(sorting).getByRole('button', { name: 'Remove sort Visits' }));
+  expect(h.onSort).toHaveBeenCalledWith('visits', null);
+});
+
+it('adds a sort by a report column that is not sorted yet', async () => {
+  const draft = { ...add(emptyDraft(DM.visitor), 'email', 'visits'), sorts: [{ column: 'visits', direction: 'desc' as const }] };
+  const h = setup(draft);
+  const sorting = screen.getByRole('region', { name: 'Sorting' });
+  await userEvent.click(within(sorting).getByRole('button', { name: 'Sort' }));
+  const menu = await screen.findByRole('dialog');
+  expect(within(menu).queryByText('Visits')).not.toBeInTheDocument();
+  await userEvent.click(within(menu).getByRole('button', { name: /Email/ }));
+  expect(h.onSort).toHaveBeenCalledWith('email', 'asc');
+});
+
+it('says when the rows are unsorted, and numbers several sorts by priority', () => {
+  setup(add(emptyDraft(DM.visitor), 'email'));
+  expect(within(screen.getByRole('region', { name: 'Sorting' })).getByText(/^Unsorted\./)).toBeInTheDocument();
+});
+
+it('reorders sorts by priority', async () => {
+  const draft = {
+    ...add(emptyDraft(DM.visitor), 'email', 'visits'),
+    sorts: [{ column: 'visits', direction: 'desc' as const }, { column: 'email', direction: 'asc' as const }],
+  };
+  const h = setup(draft);
+  const sorting = screen.getByRole('region', { name: 'Sorting' });
+  expect(within(sorting).getByText('1.')).toBeInTheDocument();
+  expect(within(sorting).getByText('2.')).toBeInTheDocument();
+  const layout = layOutColumnRows();
+  try {
+    within(sorting).getByRole('button', { name: 'Drag to reorder sort Visits' }).focus();
+    await userEvent.keyboard(' ');
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard(' ');
+  } finally {
+    layout.mockRestore();
+  }
+  expect(h.onMoveSort).toHaveBeenCalledWith(0, 1);
 });

@@ -1,6 +1,6 @@
 import { DM } from '../fixtures/smart-data';
 import { emptyDraft, type ReportDraft } from './report-draft';
-import { outputColumns, pageCount, pageOf, splitOutputKey, totalFor } from './output-columns';
+import { orderLikeDraft, outputColumns, pageCount, pageOf, splitOutputKey, totalFor } from './output-columns';
 
 const draft: ReportDraft = {
   ...emptyDraft(DM.visitor),
@@ -36,4 +36,14 @@ it('pages rows in hundreds', () => {
   expect(pageOf(items, 2)).toEqual(items.slice(200, 250));
   expect(pageCount(250)).toBe(3);
   expect(pageCount(0)).toBe(1);
+});
+
+it('orders output columns like the report, keeping each column\'s functions together', () => {
+  const applied: ReportDraft = {
+    ...emptyDraft(DM.visitor),
+    columns: [{ name: 'email', aliasPath: '' }, { name: 'visits', aliasPath: '', aggregations: ['SUM', 'AVG'] }, { name: 'client_id', aliasPath: '' }],
+  };
+  const columns = outputColumns([{ email: 'a', 'visits | SUM': 1, 'visits | AVG': 2, client_id: 'c' }], applied);
+  const now: ReportDraft = { ...applied, columns: [applied.columns[1]!, applied.columns[0]!] };
+  expect(orderLikeDraft(columns, now).map((c) => c.key)).toEqual(['visits | SUM', 'visits | AVG', 'email', 'client_id']);
 });

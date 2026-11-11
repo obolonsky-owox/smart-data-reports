@@ -27,3 +27,43 @@ it('has no info button without a description and marks the main mart', async () 
   expect(screen.queryByRole('button', { name: 'About Session' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Main data mart')).toBeInTheDocument();
 });
+
+it('draws the data mart icon ODM picked, and the default one without', async () => {
+  const { container, unmount } = renderWithServices(
+    <CanvasNodeCard node={node} appearance={{ icon: 'sessions', definitionType: null }} selected={false} />,
+    await mockServices(),
+  );
+  expect(container.querySelector('[data-testid="dataMartIcon"] svg')).toHaveClass('lucide-mouse-pointer-click');
+  unmount();
+  const second = renderWithServices(<CanvasNodeCard node={node} selected={false} />, await mockServices());
+  expect(second.container.querySelector('[data-testid="dataMartIcon"] svg')).toHaveClass('lucide-box');
+});
+
+it('draws a lucide library icon once the icon library loads', async () => {
+  const { container } = renderWithServices(
+    <CanvasNodeCard node={node} appearance={{ icon: 'lucide:anchor', definitionType: null }} selected={false} />,
+    await mockServices(),
+  );
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="dataMartIcon"] svg')).toHaveClass('lucide-anchor'));
+});
+
+it('shows the input source and the field counts unless the settings hide them', async () => {
+  const counted = { ...node, fieldCount: 12, usedFieldCount: 3 };
+  const appearance = { icon: null, definitionType: 'SQL' };
+  const services = await mockServices();
+  const show = (hidden: { source: boolean; fields: boolean }) =>
+    renderWithServices(<CanvasNodeCard node={counted} appearance={appearance} hidden={hidden} selected={false} />, services);
+
+  const all = show({ source: false, fields: false });
+  expect(screen.getByText('SQL')).toBeInTheDocument();
+  expect(screen.getByText('3 of 12 fields')).toBeInTheDocument();
+  all.unmount();
+
+  const fieldsOnly = show({ source: true, fields: false });
+  expect(screen.queryByText('SQL')).not.toBeInTheDocument();
+  expect(screen.getByText('3 of 12 fields')).toBeInTheDocument();
+  fieldsOnly.unmount();
+
+  show({ source: true, fields: true });
+  expect(screen.queryByText('3 of 12 fields')).not.toBeInTheDocument();
+});

@@ -127,6 +127,14 @@ export interface DataMartSummary {
   storage: { type: string; title: string };
 }
 
+/** How ODM draws a data mart: its picked icon and what defines it (View, Table, SQL…). */
+export interface DataMartAppearance {
+  /** A recommended icon key, `lucide:<name>`, or null for the default icon. */
+  icon: string | null;
+  /** `SQL`, `TABLE`, `VIEW`, `TABLE_PATTERN`, `CONNECTOR`, or null when not set up yet. */
+  definitionType: string | null;
+}
+
 /** A data storage of the project; relationships never cross storages. */
 export interface StorageSummary {
   id: string;

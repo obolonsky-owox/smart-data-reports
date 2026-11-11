@@ -5,6 +5,20 @@ import { isSameOrDescendant, parentPath, type AliasPath, type SchemaIndex } from
 
 export const NODE_WIDTH = 240;
 export const NODE_HEIGHT = 52;
+/** The card's meta row under the title: input source and field count. */
+export const NODE_META_HEIGHT = 24;
+
+export type CanvasDirection = 'horizontal' | 'vertical';
+
+export interface CanvasLayoutOptions {
+  direction: CanvasDirection;
+  /** Reserve room for the join-key labels; off when they only show on hover. */
+  joinLabels: boolean;
+  /** The cards carry the meta row. */
+  metaRow: boolean;
+}
+
+const DEFAULT_LAYOUT: CanvasLayoutOptions = { direction: 'horizontal', joinLabels: true, metaRow: false };
 
 export interface CanvasNode {
   path: AliasPath;
@@ -15,6 +29,10 @@ export interface CanvasNode {
   /** What the join into this instance means; empty for the main mart. */
   joinDescription: string;
   kind: 'main' | 'used' | 'transit';
+  /** Fields of the instance available for reports. */
+  fieldCount: number;
+  /** Of those, the ones that are report columns. */
+  usedFieldCount: number;
   /** Top-left corner, ready for React Flow. */
   x: number;
   y: number;
@@ -39,7 +57,14 @@ function labelSize(lines: string[]) {
 const MAIN_KEY = '__main__';
 const key = (path: AliasPath) => path || MAIN_KEY;
 
-export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, draft: ReportDraft): CanvasModel {
+export function buildCanvasModel(
+  index: SchemaIndex,
+  graph: RelationshipGraph,
+  draft: ReportDraft,
+  options: Partial<CanvasLayoutOptions> = {},
+): CanvasModel {
+  const { direction, joinLabels, metaRow } = { ...DEFAULT_LAYOUT, ...options };
+  const height = NODE_HEIGHT + (metaRow ? NODE_META_HEIGHT : 0);
   const used = usedInstances(draft).filter((p) => index.instances.has(p));
   const own = new Set([
     ...draft.columns.map((c) => c.aliasPath),
@@ -61,12 +86,12 @@ export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, d
   );
 
   const layout = new dagre.graphlib.Graph();
-  layout.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 140 });
+  layout.setGraph(direction === 'vertical' ? { rankdir: 'TB', nodesep: 40, ranksep: 90 } : { rankdir: 'LR', nodesep: 40, ranksep: 140 });
   layout.setDefaultEdgeLabel(() => ({}));
-  for (const path of paths) layout.setNode(key(path), { width: NODE_WIDTH, height: NODE_HEIGHT });
-  // dagre reserves room for the join-key label on each edge, so labels do not overlap the nodes.
+  for (const path of paths) layout.setNode(key(path), { width: NODE_WIDTH, height });
+  // dagre reserves room for the join-key label on each edge, so shown labels do not overlap the nodes.
   for (const path of paths) {
-    if (path) layout.setEdge(key(parentPath(path)), key(path), labelSize(keysByPath.get(path) ?? []));
+    if (path) layout.setEdge(key(parentPath(path)), key(path), joinLabels ? labelSize(keysByPath.get(path) ?? []) : {});
   }
   dagre.layout(layout);
 
@@ -80,8 +105,10 @@ export function buildCanvasModel(index: SchemaIndex, graph: RelationshipGraph, d
       description: instance.description,
       joinDescription: instance.joinDescription,
       kind: path === '' ? 'main' : own.has(path) || leaves.includes(path) ? 'used' : 'transit',
+      fieldCount: instance.fields.length,
+      usedFieldCount: draft.columns.filter((c) => c.aliasPath === path).length,
       x: position.x - NODE_WIDTH / 2,
-      y: position.y - NODE_HEIGHT / 2,
+      y: position.y - height / 2,
     };
   });
 

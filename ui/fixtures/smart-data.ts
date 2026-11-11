@@ -72,6 +72,17 @@ export const DATA_MARTS: DataMartSummary[] = (Object.values(DM) as MartId[]).map
   storage: id === DM.invoice ? { type: 'SNOWFLAKE', title: 'Finance Snowflake' } : { type: 'GOOGLE_BIGQUERY', title: 'Marketing BigQuery' },
 }));
 
+/** What the data mart list adds to each item: the picked icon and the definition type. */
+export const APPEARANCE: Record<MartId, { icon: string | null; definitionType: string | null }> = {
+  [DM.visitor]: { icon: 'users', definitionType: 'TABLE' },
+  [DM.contact]: { icon: 'lucide:contact', definitionType: 'VIEW' },
+  [DM.user]: { icon: 'user', definitionType: 'SQL' },
+  [DM.session]: { icon: 'sessions', definitionType: 'SQL' },
+  [DM.pageview]: { icon: 'pageviews', definitionType: 'CONNECTOR' },
+  [DM.page]: { icon: null, definitionType: 'TABLE' },
+  [DM.invoice]: { icon: 'invoices', definitionType: null },
+};
+
 /** Storage keys as `storageKey` builds them from the data mart list. */
 export const STORAGE = { bigquery: 'GOOGLE_BIGQUERY/Marketing BigQuery', snowflake: 'SNOWFLAKE/Finance Snowflake' } as const;
 

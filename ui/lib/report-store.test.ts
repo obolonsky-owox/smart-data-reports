@@ -1,7 +1,7 @@
 import { DM } from '../fixtures/smart-data';
-import { emptyDraft } from './report-draft';
+import { emptyDraft, type ReportDraft } from './report-draft';
 import {
-  configHash, createReportStore, DESCRIPTION_LIMIT, parseStoredReport,
+  configHash, createReportStore, resultHash, DESCRIPTION_LIMIT, parseStoredReport,
   type CollectionDoc, type CollectionLike, type StoredReport,
 } from './report-store';
 
@@ -117,4 +117,12 @@ describe('configHash', () => {
     expect(configHash(a)).toBe(configHash(b));
     expect(configHash(a)).not.toBe(configHash({ ...a, columns: [] }));
   });
+});
+
+it('gives drafts that differ only in column order the same result hash', () => {
+  const a: ReportDraft = { ...emptyDraft(DM.visitor), columns: [{ name: 'email', aliasPath: '' }, { name: 'visits', aliasPath: '' }] };
+  const b: ReportDraft = { ...a, columns: [a.columns[1]!, a.columns[0]!] };
+  expect(configHash(a)).not.toBe(configHash(b));
+  expect(resultHash(a)).toBe(resultHash(b));
+  expect(resultHash({ ...a, sorts: [{ column: 'email', direction: 'asc' }] })).not.toBe(resultHash(a));
 });

@@ -1,5 +1,5 @@
 import type { PluginContext } from '@owox/plugin-sdk';
-import { DATA_MARTS, GRAPHS, SCHEMAS, sampleRows } from './fixtures/smart-data';
+import { APPEARANCE, DATA_MARTS, GRAPHS, SCHEMAS, sampleRows } from './fixtures/smart-data';
 import type { ReportSummary, Row } from './lib/odm-types';
 import type { CollectionDoc, StoredReport } from './lib/report-store';
 
@@ -97,7 +97,7 @@ const owox = {
   dataMarts: {
     async list() {
       maybeFail('/api/data-marts', 'GET');
-      return DATA_MARTS.map((mart, i) => ({ ...mart, createdByUser: null, businessOwnerUsers: i === 0 ? state.martOwners : [] }));
+      return DATA_MARTS.map((mart, i) => ({ ...mart, ...APPEARANCE[mart.id as keyof typeof APPEARANCE], createdByUser: null, businessOwnerUsers: i === 0 ? state.martOwners : [] }));
     },
     async traverseData(
       id: string,
